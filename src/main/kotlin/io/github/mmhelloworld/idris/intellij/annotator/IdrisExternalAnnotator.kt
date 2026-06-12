@@ -18,7 +18,6 @@ import io.github.mmhelloworld.idris.intellij.ide.IdrisIdeService
 import io.github.mmhelloworld.idris.intellij.ide.IdrisRootResolver
 import io.github.mmhelloworld.idris.intellij.ide.LoadResult
 import io.github.mmhelloworld.idris.intellij.lang.IdrisColors
-import io.github.mmhelloworld.idris.intellij.settings.IdrisSettings
 import java.nio.file.Path
 import java.nio.file.Paths
 
@@ -65,16 +64,17 @@ class IdrisExternalAnnotator : ExternalAnnotator<IdrisAnnotationInput, IdrisAnno
             }
         }
 
+        // No deadline here: the connection enforces an IDLE timeout (progress
+        // messages keep long builds alive), so wait until it settles or the
+        // platform cancels this annotation pass. The load continues in the
+        // service either way and its result is cached for the next pass.
         val future = service.ensureLoaded(input.virtualFile)
-        val timeoutMs = IdrisSettings.getInstance().loadTimeoutSeconds * 1000L + 5000L
-        val deadline = System.currentTimeMillis() + timeoutMs
         while (!future.isDone) {
             try {
                 ProgressManager.checkCanceled()
             } catch (e: ProcessCanceledException) {
                 throw e
             }
-            if (System.currentTimeMillis() > deadline) return null
             Thread.sleep(50)
         }
         val load = try {

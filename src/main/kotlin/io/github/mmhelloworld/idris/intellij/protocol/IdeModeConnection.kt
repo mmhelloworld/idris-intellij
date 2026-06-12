@@ -43,7 +43,17 @@ class IdeModeConnection(
     private class Pending(
         val future: CompletableFuture<IdeResult>,
         val listener: AsyncReplyListener?,
-    )
+    ) {
+        val lastActivityMs = AtomicLong(System.currentTimeMillis())
+
+        fun touch() {
+            lastActivityMs.set(System.currentTimeMillis())
+        }
+    }
+
+    private companion object {
+        const val WAIT_SLICE_MS = 250L
+    }
 
     private val frameReader = FrameReader(input)
     private val requestIds = AtomicLong(1)
@@ -68,10 +78,16 @@ class IdeModeConnection(
     /**
      * Sends `(<command> <id>)` and returns a future for the final `:return`.
      * Async messages with the same request id are routed to [listener].
+     *
+     * [idleTimeoutMs] is an IDLE timeout, not a total one: every message the
+     * server sends for this request (`:write-string` build progress,
+     * `:warning`, highlights) resets the clock. A long cold build that keeps
+     * reporting progress can run indefinitely; the request only fails after
+     * [idleTimeoutMs] of complete silence.
      */
     fun request(
         command: SExp,
-        timeoutMs: Long,
+        idleTimeoutMs: Long,
         listener: AsyncReplyListener? = null,
     ): CompletableFuture<IdeResult> {
         val result = CompletableFuture<IdeResult>()
@@ -85,22 +101,14 @@ class IdeModeConnection(
                 return@execute
             }
             val id = requestIds.getAndIncrement()
-            pending[id] = Pending(result, listener)
+            val entry = Pending(result, listener)
+            pending[id] = entry
             try {
                 output.write(IdeModeFraming.encodeRequest(command, id))
                 output.flush()
                 // Hold the writer thread until this request completes so requests
                 // are never interleaved on the sequential server.
-                try {
-                    result.get(timeoutMs, TimeUnit.MILLISECONDS)
-                } catch (e: TimeoutException) {
-                    result.completeExceptionally(
-                        TimeoutException("Idris request timed out after ${timeoutMs}ms: ${command.render()}"))
-                    // Server state is unknown after a timeout; drop the session.
-                    close(e)
-                } catch (_: ExecutionException) {
-                    // Failure is already propagated through the future.
-                }
+                awaitWithIdleTimeout(result, entry, idleTimeoutMs, command)
             } catch (e: Exception) {
                 result.completeExceptionally(e)
                 close(e)
@@ -109,6 +117,34 @@ class IdeModeConnection(
             }
         }
         return result
+    }
+
+    private fun awaitWithIdleTimeout(
+        result: CompletableFuture<IdeResult>,
+        entry: Pending,
+        idleTimeoutMs: Long,
+        command: SExp,
+    ) {
+        val slice = minOf(WAIT_SLICE_MS, idleTimeoutMs)
+        while (true) {
+            try {
+                result.get(slice, TimeUnit.MILLISECONDS)
+                return
+            } catch (e: TimeoutException) {
+                val idleMs = System.currentTimeMillis() - entry.lastActivityMs.get()
+                if (idleMs >= idleTimeoutMs) {
+                    result.completeExceptionally(
+                        TimeoutException(
+                            "No compiler activity for ${idleMs}ms (limit ${idleTimeoutMs}ms): ${command.render()}"))
+                    // Server state is unknown after a timeout; drop the session.
+                    close(e)
+                    return
+                }
+            } catch (_: ExecutionException) {
+                // Failure is already propagated through the future.
+                return
+            }
+        }
     }
 
     private fun readLoop() {
@@ -131,12 +167,23 @@ class IdeModeConnection(
     private fun dispatch(reply: Reply) {
         when (reply) {
             is Reply.ProtocolVersion -> greeting.complete(reply)
-            is Reply.Return -> pending[reply.id]?.future
-                ?.complete(IdeResult(reply.ok, reply.payload, reply.errorMessage))
-            is Reply.Warning -> pending[reply.id]?.listener?.onWarning(reply.diagnostic)
-            is Reply.Highlights -> pending[reply.id]?.listener?.onHighlights(reply.spans)
-            is Reply.WriteString -> pending[reply.id]?.listener?.onWriteString(reply.text)
-            is Reply.SetPrompt -> {}
+            is Reply.Return -> pending[reply.id]?.apply {
+                touch()
+                future.complete(IdeResult(reply.ok, reply.payload, reply.errorMessage))
+            }
+            is Reply.Warning -> pending[reply.id]?.apply {
+                touch()
+                listener?.onWarning(reply.diagnostic)
+            }
+            is Reply.Highlights -> pending[reply.id]?.apply {
+                touch()
+                listener?.onHighlights(reply.spans)
+            }
+            is Reply.WriteString -> pending[reply.id]?.apply {
+                touch()
+                listener?.onWriteString(reply.text)
+            }
+            is Reply.SetPrompt -> pending[reply.id]?.touch()
             is Reply.Unknown -> {}
         }
     }

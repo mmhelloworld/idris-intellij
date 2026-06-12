@@ -110,6 +110,33 @@ class IdeModeConnectionTest {
         assertTrue(!connection.isAlive)
     }
 
+    @Test(timeout = 20_000)
+    fun `progress activity resets the idle timeout`() {
+        serverSend("(:protocol-version 2 1)")
+        connection.greeting.get(5, TimeUnit.SECONDS)
+
+        val progress = CopyOnWriteArrayList<String>()
+        val listener = object : AsyncReplyListener {
+            override fun onWriteString(text: String) {
+                progress.add(text)
+            }
+        }
+        // Idle limit 800ms, but the request takes ~1.5s total — progress
+        // messages every ~300ms must keep it alive.
+        val future = connection.request(IdeCommands.loadFile("Big.idr"), 800, listener)
+        serverReader.readFrame()
+        repeat(5) { i ->
+            Thread.sleep(300)
+            serverSend("(:write-string \"${i + 1}/5: Building M$i\" 1)")
+        }
+        serverSend("(:return (:ok ()) 1)")
+
+        val result = future.get(5, TimeUnit.SECONDS)
+        assertTrue(result.ok)
+        assertEquals(5, progress.size)
+        assertTrue(connection.isAlive)
+    }
+
     @Test(timeout = 15_000)
     fun `timeout fails the request and closes the session`() {
         serverSend("(:protocol-version 2 1)")

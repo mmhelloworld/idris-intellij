@@ -1,5 +1,6 @@
 package io.github.mmhelloworld.idris.intellij.ide
 
+import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.Disposable
@@ -7,8 +8,10 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.wm.WindowManager
 import io.github.mmhelloworld.idris.intellij.protocol.AsyncReplyListener
 import io.github.mmhelloworld.idris.intellij.protocol.IdeCommands
 import io.github.mmhelloworld.idris.intellij.protocol.IdeResult
@@ -49,10 +52,12 @@ class IdrisIdeService(private val project: Project) : Disposable {
     private val inFlightLoads = ConcurrentHashMap<String, CompletableFuture<LoadResult>>()
     private val definitionCache = ConcurrentHashMap<String, List<NameLocation>>()
     private val consecutiveStartFailures = AtomicInteger(0)
+    private val lastTimeoutNotice = java.util.concurrent.atomic.AtomicLong(0)
 
     companion object {
         private val LOG = Logger.getInstance(IdrisIdeService::class.java)
         const val DEFAULT_TIMEOUT_MS = 30_000L
+        private const val TIMEOUT_NOTICE_INTERVAL_MS = 5 * 60_000L
 
         fun getInstance(project: Project): IdrisIdeService =
             project.getService(IdrisIdeService::class.java)
@@ -88,12 +93,17 @@ class IdrisIdeService(private val project: Project) : Disposable {
             override fun onHighlights(spans: List<SemanticSpan>) {
                 highlights.addAll(spans)
             }
+
+            override fun onWriteString(text: String) {
+                // Build progress like "3/7: Building Org.Springframework.Boot (...)"
+                setStatusBarInfo("Idris: $text")
+            }
         }
 
         val relativePath = IdrisRootResolver.relativePath(root, file)
-        val timeoutMs = IdrisSettings.getInstance().loadTimeoutSeconds * 1000L
+        val idleTimeoutMs = IdrisSettings.getInstance().loadTimeoutSeconds * 1000L
         val future = handle.connection
-            .request(IdeCommands.loadFile(relativePath), timeoutMs, listener)
+            .request(IdeCommands.loadFile(relativePath), idleTimeoutMs, listener)
             .thenApply { result ->
                 LoadResult(result.ok, diagnostics.toList(), highlights.toList(), stamp, result.errorMessage)
                     .also { load ->
@@ -103,8 +113,49 @@ class IdrisIdeService(private val project: Project) : Disposable {
                     }
             }
         inFlightLoads[path] = future
-        future.whenComplete { _, _ -> inFlightLoads.remove(path) }
+        future.whenComplete { load, error ->
+            inFlightLoads.remove(path)
+            setStatusBarInfo(if (load?.success == false) "Idris: ${file.name} has errors" else "")
+            if (error != null && isTimeout(error)) {
+                notifyLoadTimeout(file.name)
+            }
+        }
         return future
+    }
+
+    private fun isTimeout(error: Throwable): Boolean =
+        generateSequence(error) { it.cause }.any { it is java.util.concurrent.TimeoutException }
+
+    private fun setStatusBarInfo(text: String) {
+        ApplicationManager.getApplication().invokeLater {
+            if (!project.isDisposed) {
+                WindowManager.getInstance().getStatusBar(project)?.info = text
+            }
+        }
+    }
+
+    /** At most one balloon per [TIMEOUT_NOTICE_INTERVAL_MS], or it would fire on every retry. */
+    private fun notifyLoadTimeout(fileName: String) {
+        val now = System.currentTimeMillis()
+        val previous = lastTimeoutNotice.get()
+        if (now - previous < TIMEOUT_NOTICE_INTERVAL_MS || !lastTimeoutNotice.compareAndSet(previous, now)) return
+        val idleSeconds = IdrisSettings.getInstance().loadTimeoutSeconds
+        ApplicationManager.getApplication().invokeLater {
+            if (project.isDisposed) return@invokeLater
+            NotificationGroupManager.getInstance()
+                .getNotificationGroup("Idris")
+                .createNotification(
+                    "Idris build timed out",
+                    "Loading $fileName produced no compiler output for ${idleSeconds}s. " +
+                        "If the compiler is just slow to start, raise the idle timeout; " +
+                        "progress messages during a build already keep the session alive.",
+                    NotificationType.WARNING,
+                )
+                .addAction(NotificationAction.createSimple("Open Idris settings") {
+                    ShowSettingsUtil.getInstance().showSettingsDialog(project, "Idris 2")
+                })
+                .notify(project)
+        }
     }
 
     /** The cached load result for [file], or null if missing or stale. */

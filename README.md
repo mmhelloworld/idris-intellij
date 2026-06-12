@@ -10,7 +10,10 @@ any `idris2` build that speaks ide-mode protocol version 2.
 - Syntax highlighting: instant lexical highlighting plus the compiler's own
   semantic highlighting (types, functions, data constructors, bound variables)
   after each successful load
-- Compiler diagnostics with precise spans, refreshed when the file is saved
+- Compiler diagnostics with precise spans, refreshed when the file is saved;
+  build progress is shown in the status bar, and long first-time builds are
+  fine — the compiler session only times out after sustained silence (idle
+  timeout), not on total duration
 - Quick documentation (type-at-point via `:type-of`, docs via `:docs-for`)
 - Go-to-definition across modules (semantic cache + `:name-at`)
 - Type-driven interactive editing via Alt-Enter intentions:
