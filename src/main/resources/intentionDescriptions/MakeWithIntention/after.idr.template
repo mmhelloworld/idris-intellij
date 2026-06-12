@@ -1,0 +1,3 @@
+filter : (a -> Bool) -> List a -> List a
+filter p (x :: xs) with (_)
+  filter p (x :: xs) | with_pat = ?filter_rhs

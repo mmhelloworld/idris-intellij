@@ -1,0 +1,3 @@
+length : List a -> Nat
+length [] = ?length_rhs_0
+length (x :: xs) = ?length_rhs_1

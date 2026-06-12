@@ -1,0 +1,4 @@
+lemma_rhs : Vect (n + 1) a -> Vect (S n) a
+
+reverseProof : Vect (n + 1) a -> Vect (S n) a
+reverseProof xs = lemma_rhs xs

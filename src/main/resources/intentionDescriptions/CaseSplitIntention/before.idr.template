@@ -1,0 +1,2 @@
+length : List a -> Nat
+length <spot>xs</spot> = ?length_rhs

@@ -1,0 +1,2 @@
+filter : (a -> Bool) -> List a -> List a
+filter p (x :: xs) = <spot>?filter_rhs</spot>

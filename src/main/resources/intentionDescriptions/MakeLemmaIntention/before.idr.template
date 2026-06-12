@@ -1,0 +1,2 @@
+reverseProof : Vect (n + 1) a -> Vect (S n) a
+reverseProof xs = <spot>?reverseProof_rhs</spot>

@@ -1,0 +1,1 @@
+<spot>append</spot> : Vect n a -> Vect m a -> Vect (n + m) a
