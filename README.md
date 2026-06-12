@@ -97,3 +97,8 @@ An Idris REPL multiplexed over the same compiler session:
 The wire-protocol notes shared with future clients (VS Code) live in
 [docs/PROTOCOL.md](docs/PROTOCOL.md). The `protocol/` package has no IntelliJ
 dependencies by design.
+
+## License
+
+[BSD-3-Clause](LICENSE), same as
+[idris-jvm](https://github.com/mmhelloworld/idris-jvm).
