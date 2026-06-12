@@ -8,11 +8,11 @@ import java.io.StringReader
 class FramingTest {
 
     @Test
-    fun `length counts the payload including newline and a sync trailer follows`() {
-        // ((:version) 1)\n = 15 chars counted; the ?sync?\n trailer keeps the
-        // JVM server's fEOF from blocking before it replies (see IdeModeFraming)
+    fun `length is lowercase hex padded to six and counts the trailing newline`() {
+        // ((:version) 1)\n = 15 chars — spec framing, requires idris2-jvm >= 0.8.2
+        // (older JVM builds had a blocking fEOF that stalled spec-framed sessions)
         val encoded = IdeModeFraming.encodeRequest(SExp.SList(SExp.SSymbol("version")), 1)
-        assertEquals("00000f((:version) 1)\n??!!??\n", encoded)
+        assertEquals("00000f((:version) 1)\n", encoded)
     }
 
     @Test

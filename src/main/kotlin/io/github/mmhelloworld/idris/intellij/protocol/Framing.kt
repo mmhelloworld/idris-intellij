@@ -15,32 +15,19 @@ import java.io.Reader
  * Both directions count the s-expression plus the trailing `"\n"` (`send` in
  * Commands.idr) — [FrameReader] expects that on the read side.
  *
- * JVM-runtime workaround (verified empirically against idris2-jvm 0.8.x): the
- * server loop calls `fEOF` between reading a request and replying
- * (Idris/IDEMode/REPL.idr `loop`), and the JVM runtime's `fEOF`
- * (ByteBufferIo.isEof) performs a BLOCKING read when its buffer is empty. A
- * spec-framed request leaves the buffer exactly empty, so the reply to command
- * N is held hostage until command N+1's bytes arrive. We therefore append a
- * sacrificial sync line ([SYNC_TRAILER]) after every frame: it keeps the
- * buffer non-empty (so `fEOF` returns immediately and the reply flushes), and
- * the server then consumes it as one unparseable line, emitting a
- * `(:return (:error "Parse error..."))` for an already-completed request id,
- * which clients ignore. The trailer is harmless on Scheme-built compilers.
+ * Compatibility note: idris2-jvm builds up to 0.8.1 cannot run multi-command
+ * stdio sessions with this (spec-conformant) framing — their `fEOF`
+ * (ByteBufferIo.isEof) performed a blocking read when its buffer was empty,
+ * withholding the reply to command N until command N+1's bytes arrived. Fixed
+ * in idris2-jvm 0.8.2 (C `feof` flag semantics). Scheme-built compilers were
+ * never affected.
  */
 object IdeModeFraming {
-
-    /**
-     * Six non-hex characters and a newline: `getNChars 6` consumes the junk,
-     * the hex parse fails, and `getFLine` consumes the newline, leaving the
-     * stream aligned for the next real frame. Must contain NO hex digits so
-     * that [FrameReader]'s between-frames skip can pass over it entirely.
-     */
-    const val SYNC_TRAILER = "??!!??\n"
 
     fun encode(sexp: SExp): String {
         val payload = sexp.render() + "\n"
         val length = payload.codePointCount(0, payload.length)
-        return String.format("%06x", length) + payload + SYNC_TRAILER
+        return String.format("%06x", length) + payload
     }
 
     /** Wraps a command with its request id: `(<command> <id>)`. */
@@ -58,18 +45,13 @@ class FrameReader(private val reader: Reader) {
     /** Returns the next message payload (without the length header), or null at EOF. */
     fun readFrame(): String? {
         val header = CharArray(6)
-        // Skip anything between frames that cannot start a length header
-        // (e.g. the client-side SYNC_TRAILER when tests read client frames).
-        var first: Int
-        do {
-            first = reader.read()
-            if (first < 0) return null
-        } while (Character.digit(first.toChar(), 16) < 0)
-        header[0] = first.toChar()
-        var read = 1
+        var read = 0
         while (read < 6) {
             val n = reader.read(header, read, 6 - read)
-            if (n < 0) throw EOFException("EOF inside frame header")
+            if (n < 0) {
+                if (read == 0) return null
+                throw EOFException("EOF inside frame header")
+            }
             read += n
         }
         val length = String(header).trim().toIntOrNull(16)

@@ -83,7 +83,6 @@ class IdeModeConnectionTest {
 
         // Only the first request is on the wire so far
         assertEquals("((:type-of \"a\") 1)", SExpParser.parse(serverReader.readFrame()!!).render())
-        repeat(IdeModeFraming.SYNC_TRAILER.length) { serverInput.read() }
         assertTrue(!serverInput.ready())
 
         serverSend("(:return (:ok \"a : A\") 1)")

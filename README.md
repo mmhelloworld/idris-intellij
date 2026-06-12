@@ -26,7 +26,9 @@ find-references, so those are not offered.
 1. Install the plugin, then set the `idris2` executable under
    **Settings | Languages & Frameworks | Idris 2**. For the JVM backend point
    it at `<idris-jvm>/build/exec/idris2`. `JAVA_OPTS` is honored by that
-   launcher script.
+   launcher script. **JVM backend builds must be 0.8.2 or newer** — older JVM
+   builds have a blocking-`fEOF` runtime bug that stalls ide-mode replies
+   (see docs/PROTOCOL.md); Scheme-built compilers of any version are fine.
 2. Open any project containing `.idr` files. The plugin spawns one
    `idris2 --ide-mode` process per `.ipkg` root (falling back to the content
    root) and loads files as you open/save them.

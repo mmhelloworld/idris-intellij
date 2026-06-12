@@ -22,21 +22,19 @@ this IntelliJ plugin and any future client (e.g. a VS Code extension).
 - The server is **strictly sequential** (`REPL.idr:462-490`): one in-flight
   request at a time; the client must queue.
 
-### JVM-backend stdio quirk (verified empirically against idris2-jvm 0.8.x)
+### JVM-backend minimum version: idris2-jvm 0.8.2
 
-The server loop calls `fEOF` between reading a request and replying, and the
-JVM runtime's `fEOF` (`ByteBufferIo.isEof`) performs a **blocking read** when
-its buffer is empty. A spec-framed request leaves the buffer exactly empty, so
-the reply to command N is withheld until command N+1's bytes arrive (a single
-command never gets a reply at all). Workaround used by this client: append a
-**sacrificial sync line** of six non-hex characters plus newline (`??!!??\n`)
-after every frame. It keeps the buffer non-empty (reply flushes immediately),
-and the server consumes it as one unparseable line, emitting a spurious
-`(:return (:error "Parse error: Can't recognise token...") <last-id>)` that
-clients must ignore (the id belongs to an already-completed request). The
-trailer is harmless on Scheme-built compilers. The proper fix is in the
-idris-jvm runtime: `fEOF` should report the EOF flag without triggering a
-blocking read (C `feof` semantics).
+idris2-jvm builds **up to 0.8.1** cannot run multi-command stdio sessions with
+spec framing: the server loop calls `fEOF` between reading a request and
+replying, and the old JVM runtime's `fEOF` (`ByteBufferIo.isEof`) performed a
+**blocking read** when its buffer was empty, withholding the reply to command
+N until command N+1's bytes arrived (a single command never got a reply at
+all). Fixed in idris2-jvm 0.8.2 (`isEof` now reports the EOF flag with C
+`feof` semantics, no blocking read). Scheme-built compilers were never
+affected. Clients that must support older JVM builds can append a sacrificial
+sync line of six non-hex characters plus newline (e.g. `??!!??\n`) after every
+frame — the server consumes it as one unparseable line and emits an ignorable
+spurious parse-error reply for an already-completed request id.
 
 ## S-expressions (`Protocol/SExp.idr`)
 
