@@ -43,6 +43,21 @@ object IdeCommands {
     fun nameAt(qualifiedName: String): SExp = list(sym("name-at"), str(qualifiedName))
 
     fun version(): SExp = list(sym("version"))
+
+    /** Holes in the loaded file; the argument is the pretty-print width. */
+    fun metavariables(width: Int = 120): SExp = list(sym("metavariables"), int(width))
+
+    fun replCompletions(prefix: String): SExp = list(sym("repl-completions"), str(prefix))
+
+    fun intro(line1: Int, holeName: String): SExp = list(sym("intro"), int(line1), str(holeName))
+
+    fun refine(line1: Int, holeName: String, expression: String): SExp =
+        list(sym("refine"), int(line1), str(holeName), str(expression))
+
+    /** Bare-symbol commands: cycle to the next search result. */
+    fun proofSearchNext(): SExp = sym("proof-search-next")
+
+    fun generateDefNext(): SExp = sym("generate-def-next")
 }
 
 /** Result of `(:name-at ...)`: definition locations with ABSOLUTE file paths, 0-based. */
@@ -50,6 +65,12 @@ data class NameLocation(val name: String, val span: FileSpan)
 
 /** Result of `(:make-lemma ...)`. */
 data class MetaVarLemma(val application: String, val lemmaSignature: String)
+
+/** One premise of a hole's context (Protocol/IDE/Holes.idr HolePremise). */
+data class HolePremise(val name: String, val type: String)
+
+/** One hole from `(:metavariables N)` (Protocol/IDE/Holes.idr HoleData). */
+data class Hole(val name: String, val type: String, val premises: List<HolePremise>)
 
 object ResultDecoder {
 
@@ -67,6 +88,40 @@ object ResultDecoder {
                 ?: return@mapNotNull null
             NameLocation(name, span)
         }
+
+    /**
+     * `(("Ns.hole" ((pname ptype ()) ...) ("type" ())) ...)` — each entry is
+     * name, premise list, and a (conclusion, metadata) pair. Wire quirks
+     * (verified against idris2 0.8.x): the hole name arrives double-encoded
+     * (`show` on a String adds literal quotes), and premise names carry
+     * quantity/alignment padding like `" 0  b"` or `"  x"`.
+     */
+    fun parseHoles(payload: SExp): List<Hole> =
+        payload.asList.orEmpty().mapNotNull { entry ->
+            val parts = entry.asList ?: return@mapNotNull null
+            val name = parts.getOrNull(0)?.asString?.removeSurrounding("\"") ?: return@mapNotNull null
+            val premises = parts.getOrNull(1)?.asList.orEmpty().mapNotNull { premise ->
+                val fields = premise.asList ?: return@mapNotNull null
+                HolePremise(
+                    fields.getOrNull(0)?.asString?.trim() ?: return@mapNotNull null,
+                    fields.getOrNull(1)?.asString ?: return@mapNotNull null,
+                )
+            }
+            val type = parts.getOrNull(2)?.asList?.getOrNull(0)?.asString ?: return@mapNotNull null
+            Hole(name, type, premises)
+        }
+
+    /** `(("completion1" "completion2" ...) "context")` */
+    fun parseCompletions(payload: SExp): List<String> =
+        payload.asList?.getOrNull(0)?.asList.orEmpty().mapNotNull { it.asString }
+
+    /**
+     * `(:intro ...)` results: a list of candidate replacements (one per
+     * constructor that fits); tolerate a plain string for single results.
+     */
+    fun parseIntroCandidates(payload: SExp): List<String> =
+        payload.asString?.let { listOf(it) }
+            ?: payload.asList.orEmpty().mapNotNull { it.asString }
 
     /** `(:metavariable-lemma (:replace-metavariable "app") (:definition-type "sig"))` */
     fun parseMetaVarLemma(payload: SExp): MetaVarLemma? {

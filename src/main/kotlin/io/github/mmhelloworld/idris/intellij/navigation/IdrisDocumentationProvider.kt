@@ -31,7 +31,7 @@ class IdrisDocumentationProvider : AbstractDocumentationProvider() {
         contextElement: PsiElement?,
         targetOffset: Int,
     ): PsiElement? {
-        if (file.language != IdrisLanguage) return null
+        if (!file.language.isKindOf(IdrisLanguage)) return null
         val element = file.findElementAt(targetOffset) ?: return null
         return when (element.node?.elementType) {
             IdrisTokenTypes.IDENTIFIER, IdrisTokenTypes.OPERATOR, IdrisTokenTypes.HOLE -> element
@@ -42,7 +42,7 @@ class IdrisDocumentationProvider : AbstractDocumentationProvider() {
     override fun generateDoc(element: PsiElement?, originalElement: PsiElement?): String? {
         val target = element ?: return null
         val file = target.containingFile ?: return null
-        if (file.language != IdrisLanguage) return null
+        if (!file.language.isKindOf(IdrisLanguage)) return null
         val virtualFile = file.virtualFile ?: return null
         val project = file.project
         val service = IdrisIdeService.getInstance(project)

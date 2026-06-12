@@ -7,7 +7,7 @@ import com.intellij.openapi.fileTypes.SyntaxHighlighter
 import com.intellij.openapi.fileTypes.SyntaxHighlighterBase
 import com.intellij.psi.tree.IElementType
 
-class IdrisSyntaxHighlighter : SyntaxHighlighterBase() {
+open class IdrisSyntaxHighlighter : SyntaxHighlighterBase() {
 
     override fun getHighlightingLexer(): Lexer = IdrisLexer()
 

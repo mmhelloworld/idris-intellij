@@ -27,7 +27,7 @@ class IdrisGotoDeclarationHandler : GotoDeclarationHandler {
     ): Array<PsiElement>? {
         val element = sourceElement ?: return null
         val file = element.containingFile ?: return null
-        if (file.language != IdrisLanguage) return null
+        if (!file.language.isKindOf(IdrisLanguage)) return null
         val virtualFile = file.virtualFile ?: return null
         val project = file.project
         val service = IdrisIdeService.getInstance(project)

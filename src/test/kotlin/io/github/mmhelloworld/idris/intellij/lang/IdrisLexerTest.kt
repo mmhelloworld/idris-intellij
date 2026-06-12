@@ -104,6 +104,44 @@ class IdrisLexerTest {
         )
     }
 
+    private fun lexLiterate(text: String): List<Pair<IElementType, String>> {
+        val lexer = IdrisLexer(literate = true)
+        lexer.start(text, 0, text.length, 0)
+        val tokens = mutableListOf<Pair<IElementType, String>>()
+        while (lexer.tokenType != null) {
+            tokens.add(lexer.tokenType!! to text.substring(lexer.tokenStart, lexer.tokenEnd))
+            lexer.advance()
+        }
+        return tokens
+    }
+
+    @Test
+    fun `literate mode treats prose lines as comments and bird-track lines as code`() {
+        val text = "Some prose here.\n> double : Nat -> Nat\nMore prose.\n"
+        val tokens = lexLiterate(text).filter { it.first != TokenType.WHITE_SPACE }
+        assertEquals(IdrisTokenTypes.LINE_COMMENT, tokens[0].first)
+        assertEquals("Some prose here.", tokens[0].second)
+        assertEquals(IdrisTokenTypes.OPERATOR, tokens[1].first) // the '>' marker
+        assertEquals(IdrisTokenTypes.IDENTIFIER, tokens[2].first)
+        assertEquals("double", tokens[2].second)
+        assertEquals(IdrisTokenTypes.LINE_COMMENT, tokens.last().first)
+        assertEquals("More prose.", tokens.last().second)
+    }
+
+    @Test
+    fun `literate mode lexes keywords inside code lines and covers the buffer`() {
+        val text = "Intro text\n> module Lit\n\n> total\nclosing words\n"
+        val tokens = lexLiterate(text)
+        assertEquals(text.length, tokens.sumOf { it.second.length })
+        val significant = tokens.filter { it.first != TokenType.WHITE_SPACE }
+        assertEquals(
+            listOf(IdrisTokenTypes.LINE_COMMENT, IdrisTokenTypes.OPERATOR, IdrisTokenTypes.KEYWORD,
+                IdrisTokenTypes.IDENTIFIER, IdrisTokenTypes.OPERATOR, IdrisTokenTypes.KEYWORD,
+                IdrisTokenTypes.LINE_COMMENT),
+            significant.map { it.first },
+        )
+    }
+
     @Test
     fun `tokens cover the whole buffer`() {
         val text = "module Main\n\nmain : IO ()\nmain = putStrLn \"hi\" -- end\n"

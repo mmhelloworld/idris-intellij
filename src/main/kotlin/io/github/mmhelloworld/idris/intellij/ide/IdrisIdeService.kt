@@ -61,7 +61,30 @@ class IdrisIdeService(private val project: Project) : Disposable {
 
         fun getInstance(project: Project): IdrisIdeService =
             project.getService(IdrisIdeService::class.java)
+
+        /** Fired on the project bus after every completed `:load-file`. */
+        @JvmField
+        val LOAD_FINISHED: com.intellij.util.messages.Topic<IdrisLoadListener> =
+            com.intellij.util.messages.Topic.create("Idris load finished", IdrisLoadListener::class.java)
     }
+
+    fun interface IdrisLoadListener {
+        fun loadFinished(file: VirtualFile, result: LoadResult)
+    }
+
+    /**
+     * Where the last proof-search/generate-def result was applied, so the
+     * `-next` commands know what text to swap out. The server keeps the
+     * iterator; we keep the document range.
+     */
+    data class LastSearchEdit(
+        val filePath: String,
+        val nextCommand: SExp,
+        val marker: com.intellij.openapi.editor.RangeMarker,
+    )
+
+    @Volatile
+    var lastSearchEdit: LastSearchEdit? = null
 
     fun rootFor(file: VirtualFile): Path = IdrisRootResolver.rootFor(project, file)
 
@@ -119,8 +142,26 @@ class IdrisIdeService(private val project: Project) : Disposable {
             if (error != null && isTimeout(error)) {
                 notifyLoadTimeout(file.name)
             }
+            if (load != null && !project.isDisposed) {
+                lastSearchEdit = null // server-side search iterators reset on load
+                project.messageBus.syncPublisher(LOAD_FINISHED).loadFinished(file, load)
+            }
         }
         return future
+    }
+
+    /** Holes of the (already loaded) [file]; null on any failure. */
+    fun holesFor(file: VirtualFile, timeoutMs: Long = DEFAULT_TIMEOUT_MS): List<io.github.mmhelloworld.idris.intellij.protocol.Hole>? {
+        if (cachedLoad(file) == null) return null
+        val result = try {
+            rawRequest(rootFor(file), IdeCommands.metavariables(), timeoutMs)
+                .get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: Exception) {
+            LOG.debug("metavariables failed", e)
+            return null
+        }
+        if (!result.ok) return null
+        return io.github.mmhelloworld.idris.intellij.protocol.ResultDecoder.parseHoles(result.payload)
     }
 
     private fun isTimeout(error: Throwable): Boolean =

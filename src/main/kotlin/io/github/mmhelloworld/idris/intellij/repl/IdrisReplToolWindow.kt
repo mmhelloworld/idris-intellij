@@ -98,7 +98,7 @@ class IdrisReplPanel(private val project: Project) : SimpleToolWindowPanel(false
     private fun activeRoot(): Path {
         val service = IdrisIdeService.getInstance(project)
         val selected = FileEditorManager.getInstance(project).selectedFiles
-            .firstOrNull { it.fileType == IdrisFileType }
+            .firstOrNull { it.fileType == IdrisFileType || it.fileType == io.github.mmhelloworld.idris.intellij.lang.IdrisLiterateFileType }
         return if (selected != null) service.rootFor(selected)
         else Paths.get(project.basePath ?: ".")
     }
@@ -139,7 +139,7 @@ class IdrisReplPanel(private val project: Project) : SimpleToolWindowPanel(false
         AnAction("Load Current File", "Load the active editor's file into the Idris REPL", AllIcons.Actions.Rerun) {
         override fun actionPerformed(e: AnActionEvent) {
             val file: VirtualFile = FileEditorManager.getInstance(project).selectedFiles
-                .firstOrNull { it.fileType == IdrisFileType } ?: return
+                .firstOrNull { it.fileType == IdrisFileType || it.fileType == io.github.mmhelloworld.idris.intellij.lang.IdrisLiterateFileType } ?: return
             FileDocumentManager.getInstance().saveAllDocuments()
             console.print("Loading ${file.name}...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
             ApplicationManager.getApplication().executeOnPooledThread {

@@ -24,10 +24,17 @@
         <fileType name="Idris" language="Idris" extensions="idr;ipkg"
                   implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisFileType"
                   fieldName="INSTANCE"/>
+        <fileType name="Literate Idris" language="IdrisLiterate" extensions="lidr"
+                  implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisLiterateFileType"
+                  fieldName="INSTANCE"/>
         <lang.parserDefinition language="Idris"
                                implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisParserDefinition"/>
+        <lang.parserDefinition language="IdrisLiterate"
+                               implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisLiterateParserDefinition"/>
         <lang.syntaxHighlighterFactory language="Idris"
                                        implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisSyntaxHighlighterFactory"/>
+        <lang.syntaxHighlighterFactory language="IdrisLiterate"
+                                       implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisLiterateSyntaxHighlighterFactory"/>
         <colorSettingsPage implementation="io.github.mmhelloworld.idris.intellij.lang.IdrisColorSettingsPage"/>
         <lang.commenter language="Idris"
                         implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisCommenter"/>
@@ -41,6 +48,8 @@
                                     implementationClass="io.github.mmhelloworld.idris.intellij.navigation.IdrisDocumentationProvider"/>
         <gotoDeclarationHandler
             implementation="io.github.mmhelloworld.idris.intellij.navigation.IdrisGotoDeclarationHandler"/>
+        <completion.contributor language="Idris"
+                                implementationClass="io.github.mmhelloworld.idris.intellij.navigation.IdrisCompletionContributor"/>
 
         <intentionAction>
             <language>Idris</language>
@@ -77,9 +86,27 @@
             <className>io.github.mmhelloworld.idris.intellij.intentions.MakeWithIntention</className>
             <category>Idris</category>
         </intentionAction>
+        <intentionAction>
+            <language>Idris</language>
+            <className>io.github.mmhelloworld.idris.intellij.intentions.IntroIntention</className>
+            <category>Idris</category>
+        </intentionAction>
+        <intentionAction>
+            <language>Idris</language>
+            <className>io.github.mmhelloworld.idris.intellij.intentions.RefineIntention</className>
+            <category>Idris</category>
+        </intentionAction>
+        <intentionAction>
+            <language>Idris</language>
+            <className>io.github.mmhelloworld.idris.intellij.intentions.NextSolutionIntention</className>
+            <category>Idris</category>
+        </intentionAction>
 
         <toolWindow id="Idris REPL" anchor="bottom" canCloseContents="false"
                     factoryClass="io.github.mmhelloworld.idris.intellij.repl.IdrisReplToolWindowFactory"
+                    icon="io.github.mmhelloworld.idris.intellij.lang.IdrisIcons.FILE"/>
+        <toolWindow id="Idris Holes" anchor="right" canCloseContents="false"
+                    factoryClass="io.github.mmhelloworld.idris.intellij.repl.IdrisHolesToolWindowFactory"
                     icon="io.github.mmhelloworld.idris.intellij.lang.IdrisIcons.FILE"/>
 
         <applicationConfigurable groupId="language" id="io.github.mmhelloworld.idris2.settings"

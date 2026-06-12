@@ -43,6 +43,11 @@ class ProofSearchIntention : IdrisIntentionBase("Proof search") {
     override fun applyEdit(document: Document, context: IntentionContext, result: IdeResult) {
         val expression = result.text ?: return
         document.replaceString(context.tokenStartOffset, context.tokenEndOffset, expression)
+        recordSearchEdit(
+            document, context,
+            context.tokenStartOffset, context.tokenStartOffset + expression.length,
+            IdeCommands.proofSearchNext(),
+        )
     }
 }
 
@@ -55,7 +60,85 @@ class GenerateDefIntention : IdrisIntentionBase("Generate definition") {
         IdeCommands.generateDef(context.line1, context.name)
 
     override fun applyEdit(document: Document, context: IntentionContext, result: IdeResult) {
-        insertAfterLine(document, context.line1, result.text ?: return)
+        val text = result.text ?: return
+        val insertOffset = document.getLineEndOffset(context.line1 - 1) + 1 // after the inserted "\n"
+        insertAfterLine(document, context.line1, text)
+        recordSearchEdit(
+            document, context,
+            insertOffset, insertOffset + text.removeSuffix("\n").length,
+            IdeCommands.generateDefNext(),
+        )
+    }
+}
+
+/**
+ * `:proof-search-next` / `:generate-def-next` — swaps the last search result
+ * for the next candidate. The server keeps the search iterator; the service
+ * remembers the document range of the last applied result.
+ */
+class NextSolutionIntention : IdrisIntentionBase("Next solution") {
+    // Reloading resets the server-side search iterator; send the bare command.
+    override val reloadsFile: Boolean = false
+
+    override fun isAvailableForToken(token: PsiElement, document: Document): Boolean {
+        val file = token.containingFile?.virtualFile ?: return false
+        val last = io.github.mmhelloworld.idris.intellij.ide.IdrisIdeService
+            .getInstance(token.project).lastSearchEdit ?: return false
+        return last.filePath == file.path && last.marker.isValid &&
+            token.textRange.startOffset >= last.marker.startOffset &&
+            token.textRange.startOffset <= last.marker.endOffset
+    }
+
+    override fun command(context: IntentionContext): SExp =
+        io.github.mmhelloworld.idris.intellij.ide.IdrisIdeService
+            .getInstance(currentProject!!).lastSearchEdit!!.nextCommand
+
+    override fun applyEdit(document: Document, context: IntentionContext, result: IdeResult) {
+        val text = result.text?.removeSuffix("\n") ?: return
+        val service = io.github.mmhelloworld.idris.intellij.ide.IdrisIdeService.getInstance(currentProject!!)
+        val last = service.lastSearchEdit ?: return
+        if (!last.marker.isValid) return
+        val start = last.marker.startOffset
+        document.replaceString(start, last.marker.endOffset, text)
+        last.marker.dispose()
+        service.lastSearchEdit = last.copy(marker = document.createRangeMarker(start, start + text.length))
+    }
+}
+
+/** `:intro` — replaces the hole with a constructor application that fits its type. */
+class IntroIntention : IdrisIntentionBase("Introduce constructor") {
+    override fun isAvailableForToken(token: PsiElement, document: Document): Boolean = isHole(token)
+
+    override fun command(context: IntentionContext): SExp =
+        IdeCommands.intro(context.line1, context.name)
+
+    override fun applyEdit(document: Document, context: IntentionContext, result: IdeResult) {
+        val candidates = ResultDecoder.parseIntroCandidates(result.payload)
+        val replacement = candidates.firstOrNull() ?: return
+        document.replaceString(context.tokenStartOffset, context.tokenEndOffset, replacement)
+    }
+}
+
+/** `:refine` — replaces the hole with a user-given expression applied to fresh holes. */
+class RefineIntention : IdrisIntentionBase("Refine hole with expression…") {
+    override val requiresArgument: Boolean = true
+
+    override fun isAvailableForToken(token: PsiElement, document: Document): Boolean = isHole(token)
+
+    override fun promptForArgument(context: IntentionContext): String? =
+        com.intellij.openapi.ui.Messages.showInputDialog(
+            currentProject,
+            "Expression to refine ?${context.name} with:",
+            "Idris: Refine Hole",
+            null,
+        )?.trim()?.takeIf { it.isNotEmpty() }
+
+    override fun command(context: IntentionContext): SExp =
+        IdeCommands.refine(context.line1, context.name, context.argument!!)
+
+    override fun applyEdit(document: Document, context: IntentionContext, result: IdeResult) {
+        val expression = result.text ?: return
+        document.replaceString(context.tokenStartOffset, context.tokenEndOffset, expression)
     }
 }
 

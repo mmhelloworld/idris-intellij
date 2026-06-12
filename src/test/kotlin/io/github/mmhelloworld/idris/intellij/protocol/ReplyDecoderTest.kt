@@ -108,6 +108,41 @@ class ReplyDecoderTest {
     }
 
     @Test
+    fun `parses holes with premises`() {
+        // Exact shape captured from idris2 0.8.x: hole name double-encoded,
+        // premise names padded with quantity markers
+        val payload = SExpParser.parse(
+            "((\"\\\"Holey.mkPair_rhs\\\"\" ((\" 0  a\" \"Type\" ()) (\"  x\" \"a\" ())) (\"(a, b)\" ())))"
+        )
+        val holes = ResultDecoder.parseHoles(payload)
+        assertEquals(1, holes.size)
+        assertEquals("Holey.mkPair_rhs", holes[0].name)
+        assertEquals("(a, b)", holes[0].type)
+        assertEquals(2, holes[0].premises.size)
+        assertEquals("0  a", holes[0].premises[0].name)
+        assertEquals("x", holes[0].premises[1].name)
+        assertEquals("a", holes[0].premises[1].type)
+    }
+
+    @Test
+    fun `parses completions`() {
+        val payload = SExpParser.parse("((\"length\" \"lengthSuffix\") \"\")")
+        assertEquals(listOf("length", "lengthSuffix"), ResultDecoder.parseCompletions(payload))
+    }
+
+    @Test
+    fun `parses intro candidates from list or string`() {
+        assertEquals(
+            listOf("(?a, ?b)"),
+            ResultDecoder.parseIntroCandidates(SExpParser.parse("(\"(?a, ?b)\")")),
+        )
+        assertEquals(
+            listOf("Nil", "(::) ?x ?xs"),
+            ResultDecoder.parseIntroCandidates(SExpParser.parse("(\"Nil\" \"(::) ?x ?xs\")")),
+        )
+    }
+
+    @Test
     fun `parses metavariable lemma`() {
         val payload = SExpParser.parse(
             "(:metavariable-lemma (:replace-metavariable \"lemma_rhs xs\") (:definition-type \"lemma_rhs : List a -> Nat\"))"

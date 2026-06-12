@@ -8,9 +8,9 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
-import com.intellij.util.IncorrectOperationException
 import io.github.mmhelloworld.idris.intellij.ide.IdrisIdeService
 import io.github.mmhelloworld.idris.intellij.lang.IdrisLanguage
 import io.github.mmhelloworld.idris.intellij.lang.IdrisTokenTypes
@@ -25,6 +25,8 @@ data class IntentionContext(
     val line1: Int,
     val tokenStartOffset: Int,
     val tokenEndOffset: Int,
+    /** Extra user input (e.g. the refine expression), when the intention prompts. */
+    val argument: String? = null,
 )
 
 /**
@@ -37,6 +39,12 @@ abstract class IdrisIntentionBase(private val actionText: String) : IntentionAct
     protected companion object {
         const val COMMAND_TIMEOUT_MS = 60_000L
     }
+
+    /** Valid during [invoke] only (intentions run sequentially on the EDT). */
+    protected var currentProject: Project? = null
+        private set
+    protected var currentFile: VirtualFile? = null
+        private set
 
     final override fun getText(): String = "Idris: $actionText"
 
@@ -56,8 +64,21 @@ abstract class IdrisIntentionBase(private val actionText: String) : IntentionAct
     /** The name argument; holes are passed without the leading `?`. */
     protected open fun nameFor(token: PsiElement): String = token.text.removePrefix("?")
 
+    /** Override to ask the user for input; returning null cancels when [requiresArgument]. */
+    protected open fun promptForArgument(context: IntentionContext): String? = null
+
+    protected open val requiresArgument: Boolean = false
+
+    /**
+     * Whether to save + (re)load the file before the command. The `-next`
+     * search commands must NOT reload: a reload resets the server's search
+     * iterator (and the document deliberately differs from the loaded state
+     * while candidates are being cycled).
+     */
+    protected open val reloadsFile: Boolean = true
+
     final override fun isAvailable(project: Project, editor: Editor?, file: PsiFile?): Boolean {
-        if (file?.language != IdrisLanguage || editor == null) return false
+        if (file == null || !file.language.isKindOf(IdrisLanguage) || editor == null) return false
         if (file.virtualFile == null) return false
         val token = file.findElementAt(editor.caretModel.offset) ?: return false
         return isAvailableForToken(token, editor.document)
@@ -69,46 +90,83 @@ abstract class IdrisIntentionBase(private val actionText: String) : IntentionAct
         val offset = editor.caretModel.offset
         val token = file.findElementAt(offset) ?: return
         val document = editor.document
-        val context = IntentionContext(
+        var context = IntentionContext(
             name = nameFor(token),
             line1 = document.getLineNumber(offset) + 1,
             tokenStartOffset = token.textRange.startOffset,
             tokenEndOffset = token.textRange.endOffset,
         )
 
-        FileDocumentManager.getInstance().saveDocument(document)
+        currentProject = project
+        currentFile = virtualFile
+        try {
+            val argument = promptForArgument(context)
+            if (requiresArgument && argument == null) return
+            context = context.copy(argument = argument)
 
-        var result: IdeResult? = null
-        var failure: Exception? = null
-        val completed = ProgressManager.getInstance().runProcessWithProgressSynchronously(
-            {
-                try {
-                    result = IdrisIdeService.getInstance(project)
-                        .request(virtualFile, command(context), COMMAND_TIMEOUT_MS)
-                        .get(COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                } catch (e: Exception) {
-                    failure = e
-                }
-            },
-            text, true, project,
-        )
-        if (!completed) return
+            if (reloadsFile) {
+                FileDocumentManager.getInstance().saveDocument(document)
+            }
 
-        val ideResult = result
-        if (ideResult == null || !ideResult.ok) {
-            val message = ideResult?.errorMessage
-                ?: failure?.cause?.message
-                ?: failure?.message
-                ?: "Idris command failed"
-            HintManager.getInstance().showErrorHint(editor, message)
-            return
+            val service = IdrisIdeService.getInstance(project)
+            var result: IdeResult? = null
+            var failure: Exception? = null
+            val completed = ProgressManager.getInstance().runProcessWithProgressSynchronously(
+                {
+                    try {
+                        val future =
+                            if (reloadsFile) service.request(virtualFile, command(context), COMMAND_TIMEOUT_MS)
+                            else service.rawRequest(service.rootFor(virtualFile), command(context), COMMAND_TIMEOUT_MS)
+                        result = future.get(COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    } catch (e: Exception) {
+                        failure = e
+                    }
+                },
+                text, true, project,
+            )
+            if (!completed) return
+
+            val ideResult = result
+            if (ideResult == null || !ideResult.ok) {
+                val message = ideResult?.errorMessage
+                    ?: failure?.cause?.message
+                    ?: failure?.message
+                    ?: "Idris command failed"
+                HintManager.getInstance().showErrorHint(editor, message)
+                return
+            }
+            val finalContext = context
+            WriteCommandAction.runWriteCommandAction(project, text, null, {
+                applyEdit(document, finalContext, ideResult)
+            }, file)
+        } finally {
+            currentProject = null
+            currentFile = null
         }
-        WriteCommandAction.runWriteCommandAction(project, text, null, {
-            applyEdit(document, context, ideResult)
-        }, file)
     }
 
-    @Throws(IncorrectOperationException::class)
+    /** Remembers where a search result landed so the `-next` command can swap it. */
+    protected fun recordSearchEdit(
+        document: Document,
+        context: IntentionContext,
+        startOffset: Int,
+        endOffset: Int,
+        nextCommand: SExp,
+    ) {
+        val project = currentProject ?: return
+        val file = currentFile ?: return
+        val service = IdrisIdeService.getInstance(project)
+        service.lastSearchEdit?.marker?.dispose()
+        service.lastSearchEdit = IdrisIdeService.LastSearchEdit(
+            file.path,
+            nextCommand,
+            document.createRangeMarker(
+                startOffset.coerceIn(0, document.textLength),
+                endOffset.coerceIn(startOffset, document.textLength),
+            ),
+        )
+    }
+
     protected fun replaceLine(document: Document, line1: Int, newText: String) {
         val line0 = line1 - 1
         if (line0 >= document.lineCount) return

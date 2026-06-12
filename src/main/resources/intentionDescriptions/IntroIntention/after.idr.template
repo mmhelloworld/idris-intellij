@@ -1,0 +1,2 @@
+mkPair : a -> b -> (a, b)
+mkPair x y = (?mkPair_rhs_0, ?mkPair_rhs_1)

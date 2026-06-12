@@ -16,10 +16,15 @@ any `idris2` build that speaks ide-mode protocol version 2.
   timeout), not on total duration
 - Quick documentation (type-at-point via `:type-of`, docs via `:docs-for`)
 - Go-to-definition across modules (semantic cache + `:name-at`)
+- Code completion backed by `:repl-completions`
 - Type-driven interactive editing via Alt-Enter intentions:
-  case split, add clause, proof search, generate definition, make lemma,
-  make case, make with
+  case split, add clause, proof search (with "next solution" cycling),
+  generate definition (also cyclable), make lemma, make case, make with,
+  introduce constructor, refine hole with an expression
+- Holes tool window listing each hole's type and context, refreshed on every
+  load; double-click navigates to the hole
 - Idris REPL tool window multiplexed over the same compiler session
+- Literate Idris (`.lidr`, bird-track style) with prose-aware highlighting
 
 Known limitation: the ide-mode protocol has no rename and no position-based
 find-references, so those are not offered.

@@ -1,0 +1,2 @@
+mkPair : a -> b -> (a, b)
+mkPair x y = <spot>?mkPair_rhs</spot>

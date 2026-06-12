@@ -173,6 +173,41 @@ class IdeModeIntegrationTest {
     }
 
     @Test
+    fun `metavariables, completions and intro answer against a real compiler`() {
+        val conn = connect()
+        writeSource(
+            "Holey.idr",
+            """
+            module Holey
+
+            mkPair : a -> b -> (a, b)
+            mkPair x y = ?mkPair_rhs
+            """.trimIndent() + "\n",
+        )
+        val (ok, _, _) = load(conn, "Holey.idr")
+        assertTrue(ok)
+
+        val holesResult = conn.request(IdeCommands.metavariables(), 30_000).get(30, TimeUnit.SECONDS)
+        assertTrue("metavariables should succeed: ${holesResult.errorMessage}", holesResult.ok)
+        val holes = io.github.mmhelloworld.idris.intellij.protocol.ResultDecoder.parseHoles(holesResult.payload)
+        assertEquals(1, holes.size)
+        assertTrue(holes[0].name.endsWith("mkPair_rhs"))
+        assertTrue("premises should include x and y", holes[0].premises.map { it.name }.containsAll(listOf("x", "y")))
+
+        val completions = conn.request(IdeCommands.replCompletions("mkP"), 30_000).get(30, TimeUnit.SECONDS)
+        assertTrue("repl-completions should succeed: ${completions.errorMessage}", completions.ok)
+        val names = io.github.mmhelloworld.idris.intellij.protocol.ResultDecoder.parseCompletions(completions.payload)
+        assertTrue("expected mkPair in $names", names.any { it.startsWith("mkPair") })
+
+        // intro on the hole (line 4, 1-based)
+        val intro = conn.request(IdeCommands.intro(4, "mkPair_rhs"), 30_000).get(30, TimeUnit.SECONDS)
+        assertTrue("intro should succeed: ${intro.errorMessage}", intro.ok)
+        val candidates = io.github.mmhelloworld.idris.intellij.protocol.ResultDecoder.parseIntroCandidates(intro.payload)
+        assertTrue("expected a pair constructor candidate: $candidates",
+            candidates.isNotEmpty() && candidates[0].contains(","))
+    }
+
+    @Test
     fun `name-at returns absolute definition locations`() {
         val conn = connect()
         writeSource(
