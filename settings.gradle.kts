@@ -1,1 +1,1 @@
-rootProject.name = "idris2-intellij"
+rootProject.name = "idris-intellij"

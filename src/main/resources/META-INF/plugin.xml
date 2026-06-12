@@ -1,5 +1,5 @@
 <idea-plugin>
-    <id>io.github.mmhelloworld.idris2</id>
+    <id>io.github.mmhelloworld.idrisintellij</id>
     <name>Idris 2 (JVM)</name>
     <vendor url="https://github.com/mmhelloworld">mmhelloworld</vendor>
     <description><![CDATA[
@@ -22,96 +22,96 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <fileType name="Idris" language="Idris" extensions="idr;ipkg"
-                  implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisFileType"
+                  implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisFileType"
                   fieldName="INSTANCE"/>
         <fileType name="Literate Idris" language="IdrisLiterate" extensions="lidr"
-                  implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisLiterateFileType"
+                  implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisLiterateFileType"
                   fieldName="INSTANCE"/>
         <lang.parserDefinition language="Idris"
-                               implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisParserDefinition"/>
+                               implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisParserDefinition"/>
         <lang.parserDefinition language="IdrisLiterate"
-                               implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisLiterateParserDefinition"/>
+                               implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisLiterateParserDefinition"/>
         <lang.syntaxHighlighterFactory language="Idris"
-                                       implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisSyntaxHighlighterFactory"/>
+                                       implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisSyntaxHighlighterFactory"/>
         <lang.syntaxHighlighterFactory language="IdrisLiterate"
-                                       implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisLiterateSyntaxHighlighterFactory"/>
-        <colorSettingsPage implementation="io.github.mmhelloworld.idris.intellij.lang.IdrisColorSettingsPage"/>
+                                       implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisLiterateSyntaxHighlighterFactory"/>
+        <colorSettingsPage implementation="io.github.mmhelloworld.idrisintellij.lang.IdrisColorSettingsPage"/>
         <lang.commenter language="Idris"
-                        implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisCommenter"/>
+                        implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisCommenter"/>
         <lang.braceMatcher language="Idris"
-                           implementationClass="io.github.mmhelloworld.idris.intellij.lang.IdrisBraceMatcher"/>
+                           implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisBraceMatcher"/>
 
         <externalAnnotator language="Idris"
-                           implementationClass="io.github.mmhelloworld.idris.intellij.annotator.IdrisExternalAnnotator"/>
+                           implementationClass="io.github.mmhelloworld.idrisintellij.annotator.IdrisExternalAnnotator"/>
 
         <lang.documentationProvider language="Idris"
-                                    implementationClass="io.github.mmhelloworld.idris.intellij.navigation.IdrisDocumentationProvider"/>
+                                    implementationClass="io.github.mmhelloworld.idrisintellij.navigation.IdrisDocumentationProvider"/>
         <gotoDeclarationHandler
-            implementation="io.github.mmhelloworld.idris.intellij.navigation.IdrisGotoDeclarationHandler"/>
+            implementation="io.github.mmhelloworld.idrisintellij.navigation.IdrisGotoDeclarationHandler"/>
         <completion.contributor language="Idris"
-                                implementationClass="io.github.mmhelloworld.idris.intellij.navigation.IdrisCompletionContributor"/>
+                                implementationClass="io.github.mmhelloworld.idrisintellij.navigation.IdrisCompletionContributor"/>
 
         <intentionAction>
             <language>Idris</language>
-            <className>io.github.mmhelloworld.idris.intellij.intentions.CaseSplitIntention</className>
+            <className>io.github.mmhelloworld.idrisintellij.intentions.CaseSplitIntention</className>
             <category>Idris</category>
         </intentionAction>
         <intentionAction>
             <language>Idris</language>
-            <className>io.github.mmhelloworld.idris.intellij.intentions.AddClauseIntention</className>
+            <className>io.github.mmhelloworld.idrisintellij.intentions.AddClauseIntention</className>
             <category>Idris</category>
         </intentionAction>
         <intentionAction>
             <language>Idris</language>
-            <className>io.github.mmhelloworld.idris.intellij.intentions.ProofSearchIntention</className>
+            <className>io.github.mmhelloworld.idrisintellij.intentions.ProofSearchIntention</className>
             <category>Idris</category>
         </intentionAction>
         <intentionAction>
             <language>Idris</language>
-            <className>io.github.mmhelloworld.idris.intellij.intentions.GenerateDefIntention</className>
+            <className>io.github.mmhelloworld.idrisintellij.intentions.GenerateDefIntention</className>
             <category>Idris</category>
         </intentionAction>
         <intentionAction>
             <language>Idris</language>
-            <className>io.github.mmhelloworld.idris.intellij.intentions.MakeLemmaIntention</className>
+            <className>io.github.mmhelloworld.idrisintellij.intentions.MakeLemmaIntention</className>
             <category>Idris</category>
         </intentionAction>
         <intentionAction>
             <language>Idris</language>
-            <className>io.github.mmhelloworld.idris.intellij.intentions.MakeCaseIntention</className>
+            <className>io.github.mmhelloworld.idrisintellij.intentions.MakeCaseIntention</className>
             <category>Idris</category>
         </intentionAction>
         <intentionAction>
             <language>Idris</language>
-            <className>io.github.mmhelloworld.idris.intellij.intentions.MakeWithIntention</className>
+            <className>io.github.mmhelloworld.idrisintellij.intentions.MakeWithIntention</className>
             <category>Idris</category>
         </intentionAction>
         <intentionAction>
             <language>Idris</language>
-            <className>io.github.mmhelloworld.idris.intellij.intentions.IntroIntention</className>
+            <className>io.github.mmhelloworld.idrisintellij.intentions.IntroIntention</className>
             <category>Idris</category>
         </intentionAction>
         <intentionAction>
             <language>Idris</language>
-            <className>io.github.mmhelloworld.idris.intellij.intentions.RefineIntention</className>
+            <className>io.github.mmhelloworld.idrisintellij.intentions.RefineIntention</className>
             <category>Idris</category>
         </intentionAction>
         <intentionAction>
             <language>Idris</language>
-            <className>io.github.mmhelloworld.idris.intellij.intentions.NextSolutionIntention</className>
+            <className>io.github.mmhelloworld.idrisintellij.intentions.NextSolutionIntention</className>
             <category>Idris</category>
         </intentionAction>
 
         <toolWindow id="Idris REPL" anchor="bottom" canCloseContents="false"
-                    factoryClass="io.github.mmhelloworld.idris.intellij.repl.IdrisReplToolWindowFactory"
-                    icon="io.github.mmhelloworld.idris.intellij.lang.IdrisIcons.FILE"/>
+                    factoryClass="io.github.mmhelloworld.idrisintellij.repl.IdrisReplToolWindowFactory"
+                    icon="io.github.mmhelloworld.idrisintellij.lang.IdrisIcons.FILE"/>
         <toolWindow id="Idris Holes" anchor="right" canCloseContents="false"
-                    factoryClass="io.github.mmhelloworld.idris.intellij.repl.IdrisHolesToolWindowFactory"
-                    icon="io.github.mmhelloworld.idris.intellij.lang.IdrisIcons.FILE"/>
+                    factoryClass="io.github.mmhelloworld.idrisintellij.repl.IdrisHolesToolWindowFactory"
+                    icon="io.github.mmhelloworld.idrisintellij.lang.IdrisIcons.FILE"/>
 
-        <applicationConfigurable groupId="language" id="io.github.mmhelloworld.idris2.settings"
+        <applicationConfigurable groupId="language" id="io.github.mmhelloworld.idrisintellij.settings"
                                  displayName="Idris 2"
-                                 instance="io.github.mmhelloworld.idris.intellij.settings.IdrisConfigurable"/>
+                                 instance="io.github.mmhelloworld.idrisintellij.settings.IdrisConfigurable"/>
 
         <notificationGroup id="Idris" displayType="BALLOON"/>
     </extensions>

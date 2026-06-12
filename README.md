@@ -29,14 +29,55 @@ any `idris2` build that speaks ide-mode protocol version 2.
 Known limitation: the ide-mode protocol has no rename and no position-based
 find-references, so those are not offered.
 
+## Feature tour
+
+Compiler diagnostics with precise spans, refreshed on save — including the
+compiler's "did you mean" hints on hover:
+
+![Compiler diagnostics](docs/images/diagnostics.gif)
+
+Quick documentation (type-at-point) on the symbol under the caret:
+
+![Quick documentation](docs/images/quick-doc.gif)
+
+Go-to-definition across modules:
+
+![Go to definition](docs/images/goto-def.gif)
+
+Code completion backed by the compiler's `:repl-completions`:
+
+![Code completion](docs/images/completion.gif)
+
+Type-driven editing with Alt-Enter intentions — case split on a pattern
+variable:
+
+![Case split](docs/images/case-split.gif)
+
+…and proof search to fill a hole:
+
+![Proof search](docs/images/proof-search.gif)
+
+The Holes tool window lists each hole with its type and context; double-click
+jumps to the hole:
+
+![Holes tool window](docs/images/holes.gif)
+
+An Idris REPL multiplexed over the same compiler session:
+
+![Idris REPL](docs/images/repl.gif)
+
 ## Setup
 
 1. Install the plugin, then set the `idris2` executable under
    **Settings | Languages & Frameworks | Idris 2**. For the JVM backend point
-   it at `<idris-jvm>/build/exec/idris2`. `JAVA_OPTS` is honored by that
-   launcher script. **JVM backend builds must be 0.8.2 or newer** — older JVM
-   builds have a blocking-`fEOF` runtime bug that stalls ide-mode replies
-   (see docs/PROTOCOL.md); Scheme-built compilers of any version are fine.
+   it at `<idris-jvm>/exec/idris2` (release zip) or
+   `<idris-jvm>/build/exec/idris2` (source build). `JAVA_OPTS` is honored by
+   that launcher script. **JVM backend builds must be 0.8.3 or newer**
+   (available from
+   [GitHub releases](https://github.com/mmhelloworld/idris-jvm/releases) and
+   Maven Central) — older JVM builds have a blocking-`fEOF` runtime bug that
+   stalls ide-mode replies (see docs/PROTOCOL.md), and the plugin refuses to
+   start against them; Scheme-built compilers of any version are fine.
 2. Open any project containing `.idr` files. The plugin spawns one
    `idris2 --ide-mode` process per `.ipkg` root (falling back to the content
    root) and loads files as you open/save them.

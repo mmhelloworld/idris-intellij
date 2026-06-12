@@ -22,16 +22,20 @@ this IntelliJ plugin and any future client (e.g. a VS Code extension).
 - The server is **strictly sequential** (`REPL.idr:462-490`): one in-flight
   request at a time; the client must queue.
 
-### JVM-backend minimum version: idris2-jvm 0.8.2
+### JVM-backend minimum version: idris2-jvm 0.8.3
 
 idris2-jvm builds **up to 0.8.1** cannot run multi-command stdio sessions with
 spec framing: the server loop calls `fEOF` between reading a request and
 replying, and the old JVM runtime's `fEOF` (`ByteBufferIo.isEof`) performed a
 **blocking read** when its buffer was empty, withholding the reply to command
 N until command N+1's bytes arrived (a single command never got a reply at
-all). Fixed in idris2-jvm 0.8.2 (`isEof` now reports the EOF flag with C
-`feof` semantics, no blocking read). Scheme-built compilers were never
-affected. Clients that must support older JVM builds can append a sacrificial
+all). The fix (`isEof` now reports the EOF flag with C `feof` semantics, no
+blocking read) landed in 0.8.2, but 0.8.3 is the first published release that
+carries it (GitHub releases + Maven Central), so clients should require
+**0.8.3 or newer**. The IntelliJ plugin enforces this by reading the backend
+version from the `idris-jvm-*-<version>.jar` next to the launcher
+(`JvmBackend.kt`) and refusing to start below the minimum. Scheme-built
+compilers were never affected. Clients that must support older JVM builds can append a sacrificial
 sync line of six non-hex characters plus newline (e.g. `??!!??\n`) after every
 frame — the server consumes it as one unparseable line and emits an ignorable
 spurious parse-error reply for an already-completed request id.

@@ -31,7 +31,7 @@ kotlin {
 
 intellijPlatform {
     pluginConfiguration {
-        id = "io.github.mmhelloworld.idris2"
+        id = "io.github.mmhelloworld.idrisintellij"
         name = "Idris 2 (JVM)"
         version = project.version.toString()
         ideaVersion {
