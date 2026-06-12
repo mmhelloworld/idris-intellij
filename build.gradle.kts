@@ -2,8 +2,8 @@ import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     id("java")
-    kotlin("jvm") version "2.0.21"
-    id("org.jetbrains.intellij.platform") version "2.5.0"
+    kotlin("jvm") version "2.2.20"
+    id("org.jetbrains.intellij.platform") version "2.16.0"
 }
 
 group = "io.github.mmhelloworld"
@@ -37,6 +37,24 @@ intellijPlatform {
         ideaVersion {
             sinceBuild = "242"
             untilBuild = provider { null }
+        }
+    }
+}
+
+// Build against the oldest supported platform (2024.2 / sinceBuild 242) but
+// offer a sandbox on the newest IDE: `./gradlew runIdeLatest`. The old
+// sandbox's bundled Gradle plugin chokes on Java 25 in its compatibility
+// matrix; 2026.x parses it fine, so no disabled_plugins workaround there.
+intellijPlatformTesting {
+    runIde {
+        register("runIdeLatest") {
+            // IDEA Community is no longer published since 2025.3; the unified
+            // IntelliJ IDEA distribution (free mode) replaces it.
+            type = org.jetbrains.intellij.platform.gradle.IntelliJPlatformType.IntellijIdea
+            version = "2026.1.3"
+            // Patch releases have no standalone installer; resolve from the
+            // intellij-repository Maven artifacts instead.
+            useInstaller = false
         }
     }
 }

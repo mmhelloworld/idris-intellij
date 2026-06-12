@@ -42,7 +42,10 @@ find-references, so those are not offered.
   connection tests, lexer)
 - `IDRIS2_EXEC=/path/to/idris2 ./gradlew test` — additionally runs integration
   tests against a real compiler
-- `./gradlew runIde` — launch a sandbox IDE; open the `sample/` project
+- `./gradlew runIde` — launch a sandbox IDE (2024.2, the oldest supported
+  platform); open the `sample/` project
+- `./gradlew runIdeLatest` — same, but on the newest IntelliJ IDEA (2026.1;
+  the unified distribution that replaced IDEA Community since 2025.3)
 - `./gradlew verifyPlugin` — plugin verifier
 
 The wire-protocol notes shared with future clients (VS Code) live in
