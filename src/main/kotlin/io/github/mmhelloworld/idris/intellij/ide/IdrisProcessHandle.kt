@@ -3,6 +3,7 @@ package io.github.mmhelloworld.idris.intellij.ide
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.openapi.diagnostic.Logger
 import io.github.mmhelloworld.idris.intellij.protocol.IdeModeConnection
+import io.github.mmhelloworld.idris.intellij.protocol.RuntimeProbe
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
@@ -37,6 +38,28 @@ class IdrisProcessHandle private constructor(
         private val LOG = Logger.getInstance(IdrisProcessHandle::class.java)
 
         /**
+         * "Still working" = the process is alive and its cumulative CPU time
+         * advanced since the last probe. The compiler emits no protocol
+         * messages while elaborating a single module, so this is what keeps
+         * long cold builds from being mistaken for hangs. Where the platform
+         * cannot report CPU time, fall back to plain liveness.
+         *
+         * Only called from the connection's writer thread, so the mutable
+         * lastCpu needs no synchronization.
+         */
+        private fun cpuLivenessProbe(process: Process): () -> Boolean {
+            var lastCpu: java.time.Duration? = null
+            return probe@{
+                if (!process.isAlive) return@probe false
+                val cpu = process.toHandle().info().totalCpuDuration().orElse(null)
+                    ?: return@probe true // no CPU info on this platform; alive is the best we have
+                val advanced = lastCpu == null || cpu > lastCpu
+                lastCpu = cpu
+                advanced
+            }
+        }
+
+        /**
          * Spawns the process and blocks (briefly) for the `(:protocol-version ...)`
          * greeting. Call from a background thread only.
          */
@@ -62,6 +85,7 @@ class IdrisProcessHandle private constructor(
                 OutputStreamWriter(process.outputStream, StandardCharsets.UTF_8),
                 name = "idris2[${root.fileName}]",
                 onClosed = onClosed,
+                livenessProbe = cpuLivenessProbe(process),
             )
             try {
                 val version = connection.greeting.get(30, TimeUnit.SECONDS)
@@ -75,6 +99,23 @@ class IdrisProcessHandle private constructor(
                     "idris2 did not send the ide-mode greeting. Check the executable path in Settings | Languages & Frameworks | Idris 2.",
                     e,
                 )
+            }
+            when (connection.probeRuntime()) {
+                RuntimeProbe.HEALTHY -> {}
+                RuntimeProbe.LEGACY_RUNTIME -> {
+                    connection.close()
+                    process.destroyForcibly()
+                    throw IllegalStateException(
+                        "This idris2 build ($executable) has the pre-0.8.2 JVM runtime stdio bug: " +
+                            "ide-mode replies stall until more input arrives, so every request would time out. " +
+                            "Point the plugin at idris2-jvm 0.8.2 or newer in Settings | Languages & Frameworks | Idris 2.")
+                }
+                RuntimeProbe.UNRESPONSIVE -> {
+                    connection.close()
+                    process.destroyForcibly()
+                    throw IllegalStateException(
+                        "idris2 ($executable) sent the ide-mode greeting but did not answer a probe command.")
+                }
             }
             return IdrisProcessHandle(root, process, connection)
         }

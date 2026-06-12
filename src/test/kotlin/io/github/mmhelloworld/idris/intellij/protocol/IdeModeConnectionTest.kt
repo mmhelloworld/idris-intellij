@@ -95,6 +95,42 @@ class IdeModeConnectionTest {
     }
 
     @Test(timeout = 10_000)
+    fun `probe reports healthy when the server answers promptly`() {
+        serverSend("(:protocol-version 2 1)")
+        connection.greeting.get(5, TimeUnit.SECONDS)
+        val responder = Thread {
+            serverReader.readFrame()
+            serverSend("(:return (:error \"Unrecognised command\") 1)")
+        }
+        responder.start()
+        assertEquals(RuntimeProbe.HEALTHY, connection.probeRuntime(5000, 1000))
+        responder.join()
+    }
+
+    @Test(timeout = 15_000)
+    fun `probe reports legacy runtime when a reply needs an extra byte`() {
+        serverSend("(:protocol-version 2 1)")
+        connection.greeting.get(5, TimeUnit.SECONDS)
+        // Simulate the pre-0.8.2 fEOF stall: read the probe frame, then hold
+        // the reply hostage until one more character arrives.
+        val responder = Thread {
+            serverReader.readFrame()
+            serverInput.read() // blocks until the client's unblocking "\n"
+            serverSend("(:return (:error \"Unrecognised command\") 1)")
+        }
+        responder.start()
+        assertEquals(RuntimeProbe.LEGACY_RUNTIME, connection.probeRuntime(800, 3000))
+        responder.join()
+    }
+
+    @Test(timeout = 15_000)
+    fun `probe reports unresponsive when nothing ever arrives`() {
+        serverSend("(:protocol-version 2 1)")
+        connection.greeting.get(5, TimeUnit.SECONDS)
+        assertEquals(RuntimeProbe.UNRESPONSIVE, connection.probeRuntime(500, 500))
+    }
+
+    @Test(timeout = 10_000)
     fun `request fails when connection closes`() {
         serverSend("(:protocol-version 2 1)")
         connection.greeting.get(5, TimeUnit.SECONDS)
@@ -135,6 +171,38 @@ class IdeModeConnectionTest {
         assertTrue(result.ok)
         assertEquals(5, progress.size)
         assertTrue(connection.isAlive)
+    }
+
+    @Test(timeout = 20_000)
+    fun `liveness probe extends the idle timeout until it reports no work`() {
+        // Separate connection so we can install a probe.
+        val clientToServer = PipedWriter()
+        val probeServerInput = PipedReader(clientToServer, 1 shl 16)
+        val probeServerOutput = PipedWriter()
+        val clientInput = PipedReader(probeServerOutput, 1 shl 16)
+        val probeCalls = java.util.concurrent.atomic.AtomicInteger(0)
+        // "Working" for the first 3 consultations, then idle.
+        val probed = IdeModeConnection(clientInput, clientToServer, "probe-test",
+            livenessProbe = { probeCalls.incrementAndGet() <= 3 })
+        try {
+            probeServerOutput.write(IdeModeFraming.encode(SExpParser.parse("(:protocol-version 2 1)")))
+            probeServerOutput.flush()
+            probed.greeting.get(5, TimeUnit.SECONDS)
+
+            // 400ms idle limit, server totally silent: the probe should be
+            // consulted ~4 times (3 extensions + 1 final) before failure.
+            val future = probed.request(IdeCommands.typeOf("a"), 400)
+            try {
+                future.get(15, TimeUnit.SECONDS)
+                throw AssertionError("expected timeout")
+            } catch (e: java.util.concurrent.ExecutionException) {
+                assertTrue(e.cause is java.util.concurrent.TimeoutException)
+            }
+            assertEquals(4, probeCalls.get())
+            assertTrue(!probed.isAlive)
+        } finally {
+            probed.close()
+        }
     }
 
     @Test(timeout = 15_000)

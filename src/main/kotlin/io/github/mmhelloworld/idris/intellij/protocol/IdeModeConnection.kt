@@ -16,6 +16,22 @@ data class IdeResult(val ok: Boolean, val payload: SExp, val errorMessage: Strin
     val text: String? get() = payload.asString
 }
 
+/** Outcome of [IdeModeConnection.probeRuntime]. */
+enum class RuntimeProbe {
+    /** Replied promptly — the runtime's stdio path works. */
+    HEALTHY,
+
+    /**
+     * Replied only after being poked with a bare newline: the pre-0.8.2
+     * idris2-jvm runtime, whose `fEOF` blocks on an empty buffer and stalls
+     * every reply until more input arrives. Unusable for ide-mode.
+     */
+    LEGACY_RUNTIME,
+
+    /** Never replied at all. */
+    UNRESPONSIVE,
+}
+
 /** Receives the async messages that arrive before a request's final `:return`. */
 interface AsyncReplyListener {
     fun onWarning(diagnostic: IdrisDiagnostic) {}
@@ -38,6 +54,14 @@ class IdeModeConnection(
     private val output: Writer,
     private val name: String = "idris2",
     private val onClosed: (Throwable?) -> Unit = {},
+    /**
+     * Consulted when a request has had no protocol messages for its idle
+     * timeout. Returning true means "the server is provably still working"
+     * (e.g. its process is consuming CPU) and resets the idle clock — the
+     * compiler emits nothing while elaborating a single large module, so
+     * message silence alone does not mean it hung. Bounded by [HARD_CAP_MS].
+     */
+    private val livenessProbe: (() -> Boolean)? = null,
 ) : AutoCloseable {
 
     private class Pending(
@@ -53,6 +77,9 @@ class IdeModeConnection(
 
     private companion object {
         const val WAIT_SLICE_MS = 250L
+
+        /** Absolute per-request ceiling even while the liveness probe reports work. */
+        const val HARD_CAP_MS = 60 * 60_000L
     }
 
     private val frameReader = FrameReader(input)
@@ -119,6 +146,49 @@ class IdeModeConnection(
         return result
     }
 
+    /**
+     * Health check for the server's stdio path, to run once after the
+     * greeting and BEFORE any real request. Sends an unrecognized command
+     * (the server answers those with a quick `:return :error`) and classifies
+     * the runtime by how it responds. Writes directly (not through the writer
+     * queue) — callers must not have other requests in flight yet.
+     */
+    fun probeRuntime(replyTimeoutMs: Long = 10_000, legacyGraceMs: Long = 2_000): RuntimeProbe {
+        val result = CompletableFuture<IdeResult>()
+        val id = requestIds.getAndIncrement()
+        val entry = Pending(result, null)
+        pending[id] = entry
+        // The server answers an unrecognized command with its CURRENT output
+        // id, which is 0 before any successful command (REPL.idr only updates
+        // it on recognized ones) — listen on both. Real requests start at 1,
+        // so 0 never conflicts.
+        pending[0] = entry
+        return try {
+            output.write(IdeModeFraming.encodeRequest(SExp.SList(listOf(SExp.SSymbol("plugin-probe"))), id))
+            output.flush()
+            try {
+                result.get(replyTimeoutMs, TimeUnit.MILLISECONDS)
+                RuntimeProbe.HEALTHY
+            } catch (_: TimeoutException) {
+                // A pre-0.8.2 JVM runtime is now blocked in fEOF; one extra
+                // byte unblocks it and the withheld reply arrives.
+                output.write("\n")
+                output.flush()
+                try {
+                    result.get(legacyGraceMs, TimeUnit.MILLISECONDS)
+                    RuntimeProbe.LEGACY_RUNTIME
+                } catch (_: TimeoutException) {
+                    RuntimeProbe.UNRESPONSIVE
+                }
+            }
+        } catch (_: Exception) {
+            RuntimeProbe.UNRESPONSIVE
+        } finally {
+            pending.remove(id)
+            pending.remove(0)
+        }
+    }
+
     private fun awaitWithIdleTimeout(
         result: CompletableFuture<IdeResult>,
         entry: Pending,
@@ -126,20 +196,26 @@ class IdeModeConnection(
         command: SExp,
     ) {
         val slice = minOf(WAIT_SLICE_MS, idleTimeoutMs)
+        val startedMs = System.currentTimeMillis()
         while (true) {
             try {
                 result.get(slice, TimeUnit.MILLISECONDS)
                 return
             } catch (e: TimeoutException) {
-                val idleMs = System.currentTimeMillis() - entry.lastActivityMs.get()
-                if (idleMs >= idleTimeoutMs) {
-                    result.completeExceptionally(
-                        TimeoutException(
-                            "No compiler activity for ${idleMs}ms (limit ${idleTimeoutMs}ms): ${command.render()}"))
-                    // Server state is unknown after a timeout; drop the session.
-                    close(e)
-                    return
+                val now = System.currentTimeMillis()
+                val idleMs = now - entry.lastActivityMs.get()
+                if (idleMs < idleTimeoutMs) continue
+                // Message-silent past the limit — is the server still working?
+                if (now - startedMs < HARD_CAP_MS && livenessProbe?.invoke() == true) {
+                    entry.touch()
+                    continue
                 }
+                result.completeExceptionally(
+                    TimeoutException(
+                        "No compiler activity for ${idleMs}ms (limit ${idleTimeoutMs}ms): ${command.render()}"))
+                // Server state is unknown after a timeout; drop the session.
+                close(e)
+                return
             } catch (_: ExecutionException) {
                 // Failure is already propagated through the future.
                 return

@@ -145,10 +145,10 @@ class IdrisIdeService(private val project: Project) : Disposable {
             NotificationGroupManager.getInstance()
                 .getNotificationGroup("Idris")
                 .createNotification(
-                    "Idris build timed out",
-                    "Loading $fileName produced no compiler output for ${idleSeconds}s. " +
-                        "If the compiler is just slow to start, raise the idle timeout; " +
-                        "progress messages during a build already keep the session alive.",
+                    "Idris compiler unresponsive",
+                    "Loading $fileName: no compiler output for ${idleSeconds}s and the idris2 process " +
+                        "shows no CPU activity — it looks hung, so the session was dropped. " +
+                        "It will restart on the next request.",
                     NotificationType.WARNING,
                 )
                 .addAction(NotificationAction.createSimple("Open Idris settings") {

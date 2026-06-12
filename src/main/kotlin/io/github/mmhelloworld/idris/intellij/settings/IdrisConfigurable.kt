@@ -44,7 +44,7 @@ class IdrisConfigurable : Configurable {
             .addLabeledComponent("idris2 executable:", pathField)
             .addTooltip("Leave empty to use idris2 from PATH. JAVA_OPTS is honored by the JVM launcher script.")
             .addLabeledComponent("Compiler idle timeout (seconds):", timeoutSpinner)
-            .addTooltip("Requests fail after this long without ANY compiler output. Build progress messages reset the clock, so long first-time builds are fine.")
+            .addTooltip("Requests fail after this long without compiler output IF the idris2 process is also idle (no CPU). A busy compiler is never timed out (1h hard cap).")
             .addLabeledComponent("Extra arguments:", extraArgsField)
             .addComponent(testButton)
             .addComponentFillVertically(JPanel(), 0)
@@ -92,11 +92,27 @@ class IdrisConfigurable : Configurable {
             )
             try {
                 val greeting = connection.greeting.get(30, TimeUnit.SECONDS)
-                Messages.showInfoMessage(
-                    panel,
-                    "Connected: ide-mode protocol version ${greeting.major}.${greeting.minor}",
-                    "Idris 2",
-                )
+                when (connection.probeRuntime()) {
+                    io.github.mmhelloworld.idris.intellij.protocol.RuntimeProbe.HEALTHY ->
+                        Messages.showInfoMessage(
+                            panel,
+                            "Connected: ide-mode protocol version ${greeting.major}.${greeting.minor}",
+                            "Idris 2",
+                        )
+                    io.github.mmhelloworld.idris.intellij.protocol.RuntimeProbe.LEGACY_RUNTIME ->
+                        Messages.showErrorDialog(
+                            panel,
+                            "This idris2 build greets but its replies stall (pre-0.8.2 JVM runtime stdio bug). " +
+                                "Use idris2-jvm 0.8.2 or newer.",
+                            "Idris 2",
+                        )
+                    io.github.mmhelloworld.idris.intellij.protocol.RuntimeProbe.UNRESPONSIVE ->
+                        Messages.showErrorDialog(
+                            panel,
+                            "idris2 sent the ide-mode greeting but did not answer a probe command.",
+                            "Idris 2",
+                        )
+                }
             } finally {
                 connection.close()
                 process.destroyForcibly()

@@ -67,6 +67,11 @@ class IdeModeIntegrationTest {
         connection = conn
         val greeting = conn.greeting.get(120, TimeUnit.SECONDS)
         assertEquals("ide-mode protocol major version", 2L, greeting.major)
+        assertEquals(
+            "runtime stdio health probe",
+            io.github.mmhelloworld.idris.intellij.protocol.RuntimeProbe.HEALTHY,
+            conn.probeRuntime(),
+        )
         return conn
     }
 
