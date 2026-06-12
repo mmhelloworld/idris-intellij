@@ -3,17 +3,16 @@ package io.github.mmhelloworld.idris.intellij.settings
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.ui.TextBrowseFolderListener
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
 import io.github.mmhelloworld.idris.intellij.ide.IdrisIdeService
-import io.github.mmhelloworld.idris.intellij.protocol.IdeModeConnection
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
-import java.nio.charset.StandardCharsets
-import java.util.concurrent.TimeUnit
+import io.github.mmhelloworld.idris.intellij.ide.IdrisProcessHandle
+import java.nio.file.Paths
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -31,7 +30,7 @@ class IdrisConfigurable : Configurable {
 
     override fun createComponent(): JComponent {
         pathField.addBrowseFolderListener(
-            com.intellij.openapi.ui.TextBrowseFolderListener(
+            TextBrowseFolderListener(
                 FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
                     .withTitle("Select idris2 Executable")
                     .withDescription("Point at the idris2 launcher (for the JVM backend: <idris-jvm>/build/exec/idris2)"),
@@ -82,47 +81,46 @@ class IdrisConfigurable : Configurable {
         extraArgsField.text = settings.extraArgs
     }
 
+    /**
+     * Spawns through [IdrisProcessHandle.start] — the SAME path real sessions
+     * use — so the verdict here matches actual behavior. (A raw ProcessBuilder
+     * would inherit the GUI app's environment, where the JVM launcher script
+     * cannot find `java` on macOS; GeneralCommandLine inside the handle gets
+     * IntelliJ's shell-sourced environment.) The greeting check, the
+     * legacy-runtime stdio probe, and stderr capture all come for free.
+     */
     private fun testConnection() {
         val executable = pathField.text.ifBlank { IdrisSettings.getInstance().resolveExecutable() }
-        try {
-            val process = ProcessBuilder(executable, "--ide-mode").start()
-            val connection = IdeModeConnection(
-                InputStreamReader(process.inputStream, StandardCharsets.UTF_8),
-                OutputStreamWriter(process.outputStream, StandardCharsets.UTF_8),
-            )
-            try {
-                val greeting = connection.greeting.get(30, TimeUnit.SECONDS)
-                when (connection.probeRuntime()) {
-                    io.github.mmhelloworld.idris.intellij.protocol.RuntimeProbe.HEALTHY ->
-                        Messages.showInfoMessage(
-                            panel,
-                            "Connected: ide-mode protocol version ${greeting.major}.${greeting.minor}",
-                            "Idris 2",
-                        )
-                    io.github.mmhelloworld.idris.intellij.protocol.RuntimeProbe.LEGACY_RUNTIME ->
-                        Messages.showErrorDialog(
-                            panel,
-                            "This idris2 build greets but its replies stall (pre-0.8.2 JVM runtime stdio bug). " +
-                                "Use idris2-jvm 0.8.2 or newer.",
-                            "Idris 2",
-                        )
-                    io.github.mmhelloworld.idris.intellij.protocol.RuntimeProbe.UNRESPONSIVE ->
-                        Messages.showErrorDialog(
-                            panel,
-                            "idris2 sent the ide-mode greeting but did not answer a probe command.",
-                            "Idris 2",
-                        )
+        val extraArgs = extraArgsField.text.split(' ').filter { it.isNotBlank() }
+        var handle: IdrisProcessHandle? = null
+        var failure: Exception? = null
+        ProgressManager.getInstance().runProcessWithProgressSynchronously(
+            {
+                try {
+                    handle = IdrisProcessHandle.start(
+                        executable, extraArgs, Paths.get(System.getProperty("user.home"))) {}
+                } catch (e: Exception) {
+                    failure = e
                 }
-            } finally {
-                connection.close()
-                process.destroyForcibly()
-            }
-        } catch (e: Exception) {
+            },
+            "Testing Idris connection", true, null,
+        )
+        val started = handle
+        if (started != null) {
+            ApplicationManager.getApplication().executeOnPooledThread { started.destroy() }
+            Messages.showInfoMessage(
+                panel,
+                "Connected: ide-mode protocol version " +
+                    "${started.protocolVersion.major}.${started.protocolVersion.minor}",
+                "Idris 2",
+            )
+        } else if (failure != null) {
             Messages.showErrorDialog(
                 panel,
-                "Could not talk to '$executable':\n${e.cause?.message ?: e.message}",
+                "Could not talk to '$executable':\n${failure.message}",
                 "Idris 2",
             )
         }
+        // Neither set: the user cancelled the progress dialog.
     }
 }

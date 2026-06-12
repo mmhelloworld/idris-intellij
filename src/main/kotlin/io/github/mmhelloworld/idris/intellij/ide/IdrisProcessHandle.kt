@@ -3,6 +3,7 @@ package io.github.mmhelloworld.idris.intellij.ide
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.openapi.diagnostic.Logger
 import io.github.mmhelloworld.idris.intellij.protocol.IdeModeConnection
+import io.github.mmhelloworld.idris.intellij.protocol.Reply
 import io.github.mmhelloworld.idris.intellij.protocol.RuntimeProbe
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -20,6 +21,7 @@ class IdrisProcessHandle private constructor(
     val root: Path,
     private val process: Process,
     val connection: IdeModeConnection,
+    val protocolVersion: Reply.ProtocolVersion,
 ) {
     @Volatile
     var loadedFilePath: String? = null
@@ -36,6 +38,7 @@ class IdrisProcessHandle private constructor(
 
     companion object {
         private val LOG = Logger.getInstance(IdrisProcessHandle::class.java)
+        private const val STDERR_TAIL_LINES = 10
 
         /**
          * "Still working" = the process is alive and its cumulative CPU time
@@ -61,7 +64,12 @@ class IdrisProcessHandle private constructor(
 
         /**
          * Spawns the process and blocks (briefly) for the `(:protocol-version ...)`
-         * greeting. Call from a background thread only.
+         * greeting, then health-checks the runtime's stdio path. Call from a
+         * background thread only.
+         *
+         * Uses [GeneralCommandLine] deliberately: it inherits IntelliJ's
+         * shell-sourced environment, so the launcher script can find `java`
+         * even though macOS GUI apps don't have the user's shell PATH.
          */
         fun start(executable: String, extraArgs: List<String>, root: Path, onClosed: (Throwable?) -> Unit): IdrisProcessHandle {
             val commandLine = GeneralCommandLine(listOf(executable) + extraArgs + "--ide-mode")
@@ -69,16 +77,31 @@ class IdrisProcessHandle private constructor(
                 .withCharset(StandardCharsets.UTF_8)
             val process = commandLine.createProcess()
 
+            val recentStderr = ArrayDeque<String>()
             val stderrDrain = Thread({
                 try {
                     BufferedReader(InputStreamReader(process.errorStream, StandardCharsets.UTF_8)).useLines { lines ->
-                        lines.forEach { LOG.info("idris2 stderr: $it") }
+                        lines.forEach { line ->
+                            LOG.info("idris2 stderr: $line")
+                            synchronized(recentStderr) {
+                                recentStderr.addLast(line)
+                                while (recentStderr.size > STDERR_TAIL_LINES) recentStderr.removeFirst()
+                            }
+                        }
                     }
                 } catch (_: Exception) {
                 }
             }, "idris2-stderr")
             stderrDrain.isDaemon = true
             stderrDrain.start()
+
+            fun fail(message: String, cause: Exception? = null): Nothing {
+                // Give the drain a moment to pick up the dying process's output.
+                if (!process.isAlive) Thread.sleep(300)
+                val stderrTail = synchronized(recentStderr) { recentStderr.toList() }
+                val detail = if (stderrTail.isEmpty()) "" else "\nidris2 stderr:\n" + stderrTail.joinToString("\n")
+                throw IllegalStateException(message + detail, cause)
+            }
 
             val connection = IdeModeConnection(
                 InputStreamReader(process.inputStream, StandardCharsets.UTF_8),
@@ -87,25 +110,26 @@ class IdrisProcessHandle private constructor(
                 onClosed = onClosed,
                 livenessProbe = cpuLivenessProbe(process),
             )
-            try {
-                val version = connection.greeting.get(30, TimeUnit.SECONDS)
-                if (version.major != 2L) {
-                    LOG.warn("Unexpected ide-mode protocol version ${version.major}.${version.minor}")
-                }
+            val version = try {
+                connection.greeting.get(30, TimeUnit.SECONDS)
             } catch (e: Exception) {
                 connection.close()
                 process.destroyForcibly()
-                throw IllegalStateException(
-                    "idris2 did not send the ide-mode greeting. Check the executable path in Settings | Languages & Frameworks | Idris 2.",
+                fail(
+                    "idris2 ($executable) did not send the ide-mode greeting. " +
+                        "Check the executable path in Settings | Languages & Frameworks | Idris 2.",
                     e,
                 )
+            }
+            if (version.major != 2L) {
+                LOG.warn("Unexpected ide-mode protocol version ${version.major}.${version.minor}")
             }
             when (connection.probeRuntime()) {
                 RuntimeProbe.HEALTHY -> {}
                 RuntimeProbe.LEGACY_RUNTIME -> {
                     connection.close()
                     process.destroyForcibly()
-                    throw IllegalStateException(
+                    fail(
                         "This idris2 build ($executable) has the pre-0.8.2 JVM runtime stdio bug: " +
                             "ide-mode replies stall until more input arrives, so every request would time out. " +
                             "Point the plugin at idris2-jvm 0.8.2 or newer in Settings | Languages & Frameworks | Idris 2.")
@@ -113,11 +137,10 @@ class IdrisProcessHandle private constructor(
                 RuntimeProbe.UNRESPONSIVE -> {
                     connection.close()
                     process.destroyForcibly()
-                    throw IllegalStateException(
-                        "idris2 ($executable) sent the ide-mode greeting but did not answer a probe command.")
+                    fail("idris2 ($executable) sent the ide-mode greeting but did not answer a probe command.")
                 }
             }
-            return IdrisProcessHandle(root, process, connection)
+            return IdrisProcessHandle(root, process, connection, version)
         }
     }
 }
