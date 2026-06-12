@@ -45,3 +45,19 @@ tasks.test {
     // Integration tests against a real compiler are enabled by setting IDRIS2_EXEC
     environment("IDRIS2_EXEC", System.getenv("IDRIS2_EXEC") ?: "")
 }
+
+tasks.prepareSandbox {
+    // The bundled Gradle plugin periodically downloads a Gradle<->JVM
+    // compatibility matrix that now lists Java 25, which 2024.2's
+    // JavaVersion.parse rejects — a PluginException on every sandbox startup.
+    // Gradle support is irrelevant for developing this plugin; keep it off.
+    doLast {
+        sandboxConfigDirectory.get().asFile.resolve("disabled_plugins.txt").writeText(
+            """
+            com.intellij.gradle
+            org.jetbrains.plugins.gradle
+            org.jetbrains.plugins.gradle.maven
+            """.trimIndent() + "\n",
+        )
+    }
+}
