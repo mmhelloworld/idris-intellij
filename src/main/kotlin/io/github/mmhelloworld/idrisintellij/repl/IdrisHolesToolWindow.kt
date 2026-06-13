@@ -6,7 +6,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.util.Computable
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
@@ -136,10 +136,10 @@ class IdrisHolesPanel(private val project: Project) : SimpleToolWindowPanel(fals
 
     private fun navigateToHole(node: HoleNode) {
         val target = "?" + HoleNode.shortName(node.hole.name)
-        val offset = ReadAction.compute<Int, RuntimeException> {
+        val offset = ApplicationManager.getApplication().runReadAction(Computable {
             val document = FileDocumentManager.getInstance().getDocument(node.file)
             document?.charsSequence?.indexOf(target) ?: -1
-        }
+        })
         if (offset >= 0) {
             OpenFileDescriptor(project, node.file, offset).navigate(true)
         } else {

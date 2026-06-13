@@ -94,6 +94,38 @@ An Idris REPL multiplexed over the same compiler session:
   the unified distribution that replaced IDEA Community since 2025.3)
 - `./gradlew verifyPlugin` — plugin verifier
 
+### Signing and publishing
+
+Marketplace uploads must be signed. Generate a key pair once:
+
+```sh
+openssl genpkey -aes-256-cbc -algorithm RSA -out private.pem -pkeyopt rsa_keygen_bits:4096
+openssl req -key private.pem -new -x509 -days 365 -out chain.crt
+```
+
+then export the credentials and sign/publish:
+
+```sh
+export CERTIFICATE_CHAIN="$(cat chain.crt)"
+export PRIVATE_KEY="$(cat private.pem)"
+export PRIVATE_KEY_PASSWORD=...   # the passphrase chosen above
+export PUBLISH_TOKEN=...          # from Marketplace profile | My Tokens
+
+./gradlew signPlugin     # produces build/distributions/<name>-signed.zip
+./gradlew publishPlugin  # signs implicitly, then uploads
+```
+
+Note: `./gradlew verifyPluginSignature` is broken in IntelliJ Platform Gradle
+Plugin 2.16.0 when the chain comes from `CERTIFICATE_CHAIN` (it mangles the
+CLI arguments; exit value 64). Verify directly with the zip-signer CLI
+instead:
+
+```sh
+java -cp ~/.gradle/caches/modules-2/files-2.1/org.jetbrains/marketplace-zip-signer/*/*/marketplace-zip-signer-*-cli.jar \
+  org.jetbrains.zip.signer.ZipSigningTool verify \
+  -in build/distributions/idris-intellij-<version>-signed.zip -cert chain.crt
+```
+
 The wire-protocol notes shared with future clients (VS Code) live in
 [docs/PROTOCOL.md](docs/PROTOCOL.md). The `protocol/` package has no IntelliJ
 dependencies by design.

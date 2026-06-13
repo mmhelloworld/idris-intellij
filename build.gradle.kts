@@ -20,6 +20,7 @@ dependencies {
     intellijPlatform {
         intellijIdeaCommunity("2024.2.4")
         testFramework(TestFrameworkType.Platform)
+        zipSigner()
     }
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.opentest4j:opentest4j:1.3.0")
@@ -27,6 +28,13 @@ dependencies {
 
 kotlin {
     jvmToolchain(17)
+    compilerOptions {
+        // Use the platform interfaces' Java default methods directly instead
+        // of generating DefaultImpls bridges in implementing classes — the
+        // bridges count as overrides of @ApiStatus.Internal members
+        // (ToolWindowFactory.getAnchor/getIcon/manage) and fail verifyPlugin.
+        jvmDefault = org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode.NO_COMPATIBILITY
+    }
 }
 
 intellijPlatform {
@@ -38,6 +46,16 @@ intellijPlatform {
             sinceBuild = "242"
             untilBuild = provider { null }
         }
+    }
+    // Marketplace plugin signing: `./gradlew signPlugin` (and publishPlugin
+    // signs implicitly). Key generation is documented in the README.
+    signing {
+        certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+        privateKey = providers.environmentVariable("PRIVATE_KEY")
+        password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+    }
+    publishing {
+        token = providers.environmentVariable("PUBLISH_TOKEN")
     }
 }
 

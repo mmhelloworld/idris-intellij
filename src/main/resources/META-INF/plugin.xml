@@ -1,10 +1,10 @@
 <idea-plugin>
     <id>io.github.mmhelloworld.idrisintellij</id>
     <name>Idris 2 (JVM)</name>
-    <vendor url="https://github.com/mmhelloworld">mmhelloworld</vendor>
+    <vendor url="https://github.com/mmhelloworld">Marimuthu Madasamy</vendor>
     <description><![CDATA[
         IDE support for <a href="https://www.idris-lang.org/">Idris 2</a>, talking directly to the
-        compiler's IDE-mode protocol — works great with the
+        compiler's IDE-mode protocol - works great with the
         <a href="https://github.com/mmhelloworld/idris-jvm">JVM backend</a> (and any idris2 build).
         <ul>
             <li>Syntax highlighting (lexical + compiler semantic highlighting)</li>
