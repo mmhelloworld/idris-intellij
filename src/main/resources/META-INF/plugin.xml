@@ -50,6 +50,7 @@
             implementation="io.github.mmhelloworld.idrisintellij.navigation.IdrisGotoDeclarationHandler"/>
         <completion.contributor language="Idris"
                                 implementationClass="io.github.mmhelloworld.idrisintellij.navigation.IdrisCompletionContributor"/>
+        <typedHandler implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisTypedHandler"/>
 
         <intentionAction>
             <language>Idris</language>
