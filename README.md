@@ -14,8 +14,15 @@ any `idris2` build that speaks ide-mode protocol version 2.
   build progress is shown in the status bar, and long first-time builds are
   fine — the compiler session only times out after sustained silence (idle
   timeout), not on total duration
-- Quick documentation (type-at-point via `:type-of`, docs via `:docs-for`)
+- Quick documentation: the symbol's doc comment together with its type
+  signature, totality and visibility (`:type-of` + `:docs-for`), resolved to
+  the exact symbol under the caret rather than every same-named definition
 - Go-to-definition across modules (semantic cache + `:name-at`)
+- File outline in the Structure tool window and the ⌘F12 File Structure popup;
+  selecting a declaration jumps the editor to it
+- Code folding for declarations, breadcrumbs showing the nested path to the
+  caret (e.g. a function and its `where`-local), and highlight-usages (⌘F7) of
+  the identifier under the caret
 - Code completion backed by `:repl-completions`
 - Type-driven interactive editing via Alt-Enter intentions:
   case split, add clause, proof search (with "next solution" cycling),
@@ -36,13 +43,27 @@ compiler's "did you mean" hints on hover:
 
 ![Compiler diagnostics](docs/images/diagnostics.gif)
 
-Quick documentation (type-at-point) on the symbol under the caret:
+Quick documentation on the symbol under the caret - the full doc comment
+alongside the type signature, totality and visibility:
 
-![Quick documentation](docs/images/quick-doc.gif)
+![Quick documentation](docs/images/quick-doc.png)
 
 Go-to-definition across modules:
 
 ![Go to definition](docs/images/goto-def.gif)
+
+File navigation by declaration — the Structure tool window lists a file's
+declarations and clicking one jumps the editor there; the ⌘F12 File Structure
+popup does the same with type-to-filter and keyboard selection:
+
+![Structure view and File Structure popup](docs/images/structure-nav.gif)
+
+Code folding, breadcrumbs, and highlight usages — highlight every occurrence of
+the name under the caret (⌘F7), watch the breadcrumb show the nested path to the
+caret (here `stMain › quitWithError`), and collapse the file to an outline of
+its declarations:
+
+![Code folding, breadcrumbs and highlight usages](docs/images/folding-breadcrumbs-usages.gif)
 
 Code completion backed by the compiler's `:repl-completions`:
 

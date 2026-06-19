@@ -1,13 +1,15 @@
+import org.jetbrains.changelog.Changelog
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
     id("java")
     kotlin("jvm") version "2.2.20"
     id("org.jetbrains.intellij.platform") version "2.16.0"
+    id("org.jetbrains.changelog") version "2.2.1"
 }
 
 group = "io.github.mmhelloworld"
-version = "0.1.1"
+version = "0.1.2"
 
 repositories {
     mavenCentral()
@@ -42,6 +44,20 @@ intellijPlatform {
         id = "io.github.mmhelloworld.idrisintellij"
         name = "Idris 2 (JVM)"
         version = project.version.toString()
+        // Marketplace "What's New" = the current version's CHANGELOG.md section,
+        // rendered to HTML into plugin.xml <change-notes> (without the version
+        // header, which the Marketplace shows separately). Falls back to the
+        // [Unreleased] section if the version has no entry yet.
+        changeNotes = provider {
+            with(changelog) {
+                renderItem(
+                    (getOrNull(project.version.toString()) ?: getUnreleased())
+                        .withHeader(false)
+                        .withEmptySections(false),
+                    Changelog.OutputType.HTML,
+                )
+            }
+        }
         ideaVersion {
             sinceBuild = "242"
             untilBuild = provider { null }
