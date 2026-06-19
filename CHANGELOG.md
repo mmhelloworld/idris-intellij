@@ -1,8 +1,8 @@
 # Idris 2 (JVM) Changelog
 
-## [Unreleased]
+## Unreleased
 
-## [0.1.2]
+## 0.1.2
 
 ### Added
 
@@ -22,6 +22,6 @@
 - The structure view omits `import` lines to keep the outline focused.
 - Improved code completion.
 
-## [0.1.1]
+## 0.1.1
 
 - Initial Marketplace release.
