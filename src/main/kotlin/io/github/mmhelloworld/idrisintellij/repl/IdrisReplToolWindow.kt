@@ -56,7 +56,8 @@ class IdrisReplPanel(private val project: Project) : SimpleToolWindowPanel(false
         center.add(input, BorderLayout.SOUTH)
         setContent(center)
 
-        val actions = DefaultActionGroup(LoadCurrentFileAction(), RestartAction())
+        val reloadProject = ActionManager.getInstance().getAction("io.github.mmhelloworld.idrisintellij.ReloadProject")
+        val actions = DefaultActionGroup(LoadCurrentFileAction(), reloadProject, RestartAction())
         val actionToolbar = ActionManager.getInstance().createActionToolbar("IdrisRepl", actions, false)
         actionToolbar.targetComponent = center
         setToolbar(actionToolbar.component)

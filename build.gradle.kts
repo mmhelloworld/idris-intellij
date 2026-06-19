@@ -93,6 +93,16 @@ intellijPlatformTesting {
     }
 }
 
+// Opt-in: `./gradlew runIde -PidrisSampleProject=/abs/path` opens that project
+// directory in the sandbox IDE instead of the welcome screen. Handy for trying
+// the plugin against the bundled multi-project sample.
+tasks.runIde {
+    val sampleProject = providers.gradleProperty("idrisSampleProject")
+    if (sampleProject.isPresent) {
+        args(sampleProject.get())
+    }
+}
+
 tasks.test {
     // Integration tests against a real compiler are enabled by setting IDRIS2_EXEC
     environment("IDRIS2_EXEC", System.getenv("IDRIS2_EXEC") ?: "")

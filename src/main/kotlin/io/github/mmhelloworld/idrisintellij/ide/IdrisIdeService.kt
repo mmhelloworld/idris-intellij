@@ -306,6 +306,22 @@ class IdrisIdeService(private val project: Project) : Disposable {
         }
     }
 
+    /**
+     * Drops cached `:load-file` and `:name-at` results so the next request
+     * reloads from the compiler, without killing the running processes. Called
+     * when build outputs change on disk (see [IdrisBuildOutputListener]).
+     *
+     * The freshness check in [cachedLoad] only looks at the dependent file's own
+     * modification stamp, so a dependency rebuilt outside the IDE would never be
+     * picked up until that file is edited or the IDE restarts. A live ide-mode
+     * process does recompile against a rebuilt dependency TTC on the next
+     * `:load-file`, so clearing the cache is enough — no process restart needed.
+     */
+    fun invalidateBuildCaches() {
+        loadCache.clear()
+        definitionCache.clear()
+    }
+
     /** Kills all compiler processes; they restart lazily on the next request. */
     fun restart() {
         val current = handles.values.toList()

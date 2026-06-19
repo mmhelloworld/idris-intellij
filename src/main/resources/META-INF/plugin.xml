@@ -125,4 +125,19 @@
 
         <notificationGroup id="Idris" displayType="BALLOON"/>
     </extensions>
+
+    <projectListeners>
+        <listener class="io.github.mmhelloworld.idrisintellij.ide.IdrisBuildOutputListener"
+                  topic="com.intellij.openapi.vfs.newvfs.BulkFileListener"/>
+    </projectListeners>
+
+    <actions>
+        <action id="io.github.mmhelloworld.idrisintellij.ReloadProject"
+                class="io.github.mmhelloworld.idrisintellij.actions.IdrisReloadProjectAction"
+                text="Reload Idris Project"
+                icon="AllIcons.Actions.Refresh"
+                description="Drop cached compiler results and re-analyse open files so changes built outside the IDE (e.g. a dependency rebuilt from the command line) are picked up.">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>

@@ -1,0 +1,5 @@
+package app
+version = 0.1.0
+sourcedir = "src"
+depends = core
+modules = App
