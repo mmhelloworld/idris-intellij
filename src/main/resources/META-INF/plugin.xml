@@ -52,6 +52,15 @@
                                 implementationClass="io.github.mmhelloworld.idrisintellij.navigation.IdrisCompletionContributor"/>
         <typedHandler implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisTypedHandler"/>
 
+        <highlightUsagesHandlerFactory
+            implementation="io.github.mmhelloworld.idrisintellij.navigation.IdrisHighlightUsagesHandlerFactory"/>
+        <lang.psiStructureViewFactory language="Idris"
+                                      implementationClass="io.github.mmhelloworld.idrisintellij.navigation.IdrisStructureViewFactory"/>
+        <lang.foldingBuilder language="Idris"
+                             implementationClass="io.github.mmhelloworld.idrisintellij.lang.IdrisFoldingBuilder"/>
+        <breadcrumbsInfoProvider
+            implementation="io.github.mmhelloworld.idrisintellij.navigation.IdrisBreadcrumbsProvider"/>
+
         <intentionAction>
             <language>Idris</language>
             <className>io.github.mmhelloworld.idrisintellij.intentions.CaseSplitIntention</className>

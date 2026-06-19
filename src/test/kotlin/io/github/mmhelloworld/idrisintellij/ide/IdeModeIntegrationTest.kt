@@ -208,6 +208,87 @@ class IdeModeIntegrationTest {
     }
 
     @Test
+    fun `docs-for returns the type signature and the doc comment for a bare name`() {
+        val conn = connect()
+        writeSource(
+            "Docs.idr",
+            """
+            module Docs
+
+            ||| Doubles a natural number.
+            double : Nat -> Nat
+            double n = n + n
+            """.trimIndent() + "\n",
+        )
+        val (ok, _, _) = load(conn, "Docs.idr")
+        assertTrue(ok)
+
+        // docs-for resolves bare names and returns BOTH signature and doc text.
+        val docs = conn.request(IdeCommands.docsFor("double"), 30_000).get(30, TimeUnit.SECONDS)
+        assertTrue("docs-for should succeed: ${docs.errorMessage}", docs.ok)
+        val text = docs.text!!
+        assertTrue("expected the type signature in: $text", text.contains("Nat -> Nat"))
+        assertTrue("expected the doc comment text in: $text", text.contains("Doubles a natural number"))
+    }
+
+    /**
+     * The protocol facts the documentation provider's disambiguation relies on:
+     * `:type-of` at a caret returns the resolved `Qualified.Name : Type`, that
+     * name is the header of the matching `:docs-for` block, and `:docs-for`
+     * accepts ONLY the bare name (qualified queries are rejected). If any of
+     * these change, IdrisDocumentationProvider must be revisited.
+     */
+    @Test
+    fun `type-of at caret resolves the ambiguous name that docs-for blocks are keyed by`() {
+        val conn = connect()
+        writeSource(
+            "Amb.idr",
+            """
+            module Amb
+            import Data.List
+
+            xs : List Nat
+            xs = [1, 2, 3]
+
+            myLen : Nat
+            myLen = List.length xs
+            """.trimIndent() + "\n",
+        )
+        val (ok, _, _) = load(conn, "Amb.idr")
+        assertTrue(ok)
+
+        // `length` is on 0-based line 7; the occurrence spans cols 8..19.
+        val typeOf = conn.request(IdeCommands.typeOfAt("length", 8, 13), 30_000).get(30, TimeUnit.SECONDS)
+        assertTrue("type-of should succeed: ${typeOf.errorMessage}", typeOf.ok)
+        val resolved = typeOf.text!!
+        assertEquals("Prelude.List.length : List a -> Nat", resolved)
+        val qualifiedName = resolved.substringBefore(" : ").trim()
+
+        // Bare docs-for returns MANY same-named blocks (the noise we filter).
+        val docs = conn.request(IdeCommands.docsFor("length"), 30_000).get(30, TimeUnit.SECONDS)
+        assertTrue("docs-for(bare) should succeed", docs.ok)
+        val headers = docs.text!!.lines().filter { it.isNotEmpty() && !it[0].isWhitespace() }
+        assertTrue("expected several same-named blocks, got: $headers", headers.size >= 3)
+        assertTrue("expected our resolved name among the block headers: $headers",
+            headers.any { it.substringBefore(" : ").trim() == qualifiedName })
+
+        // Qualified docs-for is rejected, which is why we must filter bare output.
+        val qualified = conn.request(IdeCommands.docsFor(qualifiedName), 30_000).get(30, TimeUnit.SECONDS)
+        assertFalse("qualified docs-for is expected to fail", qualified.ok)
+
+        // End-to-end: the provider's filter keeps exactly the resolved block.
+        val block = io.github.mmhelloworld.idrisintellij.navigation.IdrisDocumentationProvider
+            .selectDocBlock(docs.text!!, qualifiedName)
+        assertEquals(
+            "Prelude.List.length : List a -> Nat\n" +
+                "  Returns the length of the list.\n" +
+                "  Totality: total\n" +
+                "  Visibility: public export",
+            block,
+        )
+    }
+
+    @Test
     fun `name-at returns absolute definition locations`() {
         val conn = connect()
         writeSource(
