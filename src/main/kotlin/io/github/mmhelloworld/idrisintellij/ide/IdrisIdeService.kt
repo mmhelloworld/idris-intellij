@@ -12,6 +12,7 @@ import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.WindowManager
+import com.intellij.util.messages.Topic
 import io.github.mmhelloworld.idrisintellij.protocol.AsyncReplyListener
 import io.github.mmhelloworld.idrisintellij.protocol.IdeCommands
 import io.github.mmhelloworld.idrisintellij.protocol.IdeResult
@@ -49,6 +50,9 @@ class IdrisIdeService(private val project: Project) : Disposable {
 
     private val handles = ConcurrentHashMap<Path, IdrisProcessHandle>()
     private val loadCache = ConcurrentHashMap<String, LoadResult>()
+    // Last load that actually produced highlights. Survives subsequent dirty/failed-parse loads, so
+    // completion can keep resolving names while you are mid-edit (when `loadCache` is stale or empty).
+    private val lastGoodLoadCache = ConcurrentHashMap<String, LoadResult>()
     private val inFlightLoads = ConcurrentHashMap<String, CompletableFuture<LoadResult>>()
     private val definitionCache = ConcurrentHashMap<String, List<NameLocation>>()
     private val consecutiveStartFailures = AtomicInteger(0)
@@ -64,8 +68,8 @@ class IdrisIdeService(private val project: Project) : Disposable {
 
         /** Fired on the project bus after every completed `:load-file`. */
         @JvmField
-        val LOAD_FINISHED: com.intellij.util.messages.Topic<IdrisLoadListener> =
-            com.intellij.util.messages.Topic.create("Idris load finished", IdrisLoadListener::class.java)
+        val LOAD_FINISHED: Topic<IdrisLoadListener> =
+            Topic.create("Idris load finished", IdrisLoadListener::class.java)
     }
 
     fun interface IdrisLoadListener {
@@ -131,6 +135,7 @@ class IdrisIdeService(private val project: Project) : Disposable {
                 LoadResult(result.ok, diagnostics.toList(), highlights.toList(), stamp, result.errorMessage)
                     .also { load ->
                         loadCache[path] = load
+                        if (load.highlights.isNotEmpty()) lastGoodLoadCache[path] = load
                         handle.loadedFilePath = path
                         definitionCache.clear()
                     }
@@ -203,6 +208,20 @@ class IdrisIdeService(private val project: Project) : Disposable {
     fun cachedLoad(file: VirtualFile): LoadResult? {
         val cached = loadCache[file.path] ?: return null
         if (cached.modStamp != currentStamp(file)) return null
+        val handle = handles[rootFor(file)] ?: return null
+        if (!handle.isAlive || handle.loadedFilePath != file.path) return null
+        return cached
+    }
+
+    /**
+     * The most recent load that produced highlights, IGNORING modification staleness — for
+     * best-effort completion while the file is dirty (an in-progress edit, so `cachedLoad` is null,
+     * or a transient parse error, so the latest load has no highlights). Names/namespaces from the
+     * last good state are still the right basis for resolving a completion receiver; positions may be
+     * off, but completion does not rely on them. Still requires this file to be the one loaded.
+     */
+    fun lastGoodLoad(file: VirtualFile): LoadResult? {
+        val cached = lastGoodLoadCache[file.path] ?: return null
         val handle = handles[rootFor(file)] ?: return null
         if (!handle.isAlive || handle.loadedFilePath != file.path) return null
         return cached
@@ -288,9 +307,9 @@ class IdrisIdeService(private val project: Project) : Disposable {
 
     private fun removeHandle(root: Path) {
         handles.remove(root)
-        loadCache.keys.removeIf { path ->
-            handles.values.none { it.loadedFilePath == path }
-        }
+        val orphaned = { path: String -> handles.values.none { it.loadedFilePath == path } }
+        loadCache.keys.removeIf(orphaned)
+        lastGoodLoadCache.keys.removeIf(orphaned)
     }
 
     private fun notifyStartupFailure(cause: Exception) {
@@ -319,6 +338,7 @@ class IdrisIdeService(private val project: Project) : Disposable {
      */
     fun invalidateBuildCaches() {
         loadCache.clear()
+        lastGoodLoadCache.clear()
         definitionCache.clear()
     }
 
@@ -327,6 +347,7 @@ class IdrisIdeService(private val project: Project) : Disposable {
         val current = handles.values.toList()
         handles.clear()
         loadCache.clear()
+        lastGoodLoadCache.clear()
         definitionCache.clear()
         consecutiveStartFailures.set(0)
         ApplicationManager.getApplication().executeOnPooledThread {

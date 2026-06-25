@@ -2,4 +2,6 @@ package sample
 version = 0.1.0
 
 sourcedir = "src"
+
+opts = "--jvm-ffi-list java/util/ArrayList"
 modules = Main, Shapes

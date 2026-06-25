@@ -32,6 +32,35 @@ class ReplyDecoderTest {
     }
 
     @Test
+    fun `parseCatalog extracts members, skips headers and namespace lines, collapses overloads`() {
+        val catalog = """
+            -- java/util/ArrayDeque  (import Java.Util)
+            namespace ArrayDeque
+              new : (HasIO io) => io (Java.Util.ArrayDeque rt_0)
+              addLast : (HasIO io) => Java.Util.ArrayDeque e -> e -> io ()
+              pollFirst : (HasIO io) => Java.Util.ArrayDeque e -> io (Maybe e)
+              add : (HasIO io) => Java.Util.ArrayDeque e -> e -> io Bool
+              namespace Add2
+                add : (HasIO io) => Java.Util.ArrayDeque e -> Int -> e -> io ()
+        """.trimIndent()
+
+        val members = ResultDecoder.parseCatalog(catalog)
+        val names = members.map { it.name }
+
+        // header (`-- ...`) and `namespace ...` lines are not members
+        assertFalse("namespace must not be a member", names.contains("namespace"))
+        // overloaded `add` (canonical + Add2) collapses to a single entry
+        assertEquals(1, names.count { it == "add" })
+        assertEquals(listOf("new", "addLast", "pollFirst", "add"), names)
+        // signature is carried verbatim (first/canonical kept for the overload)
+        assertEquals(
+            "(HasIO io) => Java.Util.ArrayDeque e -> e -> io Bool",
+            members.first { it.name == "add" }.signature,
+        )
+        assertTrue(members.first { it.name == "pollFirst" }.signature.contains("io (Maybe e)"))
+    }
+
+    @Test
     fun `decodes error return`() {
         val reply = decode("(:return (:error \"Couldn't find Main\") 7)") as Reply.Return
         assertFalse(reply.ok)

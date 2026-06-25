@@ -4,6 +4,7 @@ import io.github.mmhelloworld.idrisintellij.protocol.AsyncReplyListener
 import io.github.mmhelloworld.idrisintellij.protocol.IdeCommands
 import io.github.mmhelloworld.idrisintellij.protocol.IdeModeConnection
 import io.github.mmhelloworld.idrisintellij.protocol.IdrisDiagnostic
+import io.github.mmhelloworld.idrisintellij.protocol.ResultDecoder
 import io.github.mmhelloworld.idrisintellij.protocol.SemanticSpan
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -96,6 +97,29 @@ class IdeModeIntegrationTest {
         val result = conn.request(IdeCommands.loadFile(fileName), 300_000, listener)
             .get(300, TimeUnit.SECONDS)
         return Triple(result.ok, diagnostics.toList(), highlights.toList())
+    }
+
+    @Test
+    fun `jvm-ffi-list returns the full member catalog for a JDK class`() {
+        val conn = connect()
+        // Stateless reflection — no file load needed. Empty classpath: JDK classes resolve via jrt.
+        val reply = conn.request(IdeCommands.jvmFfiList("", "java/util/ArrayDeque"), 30_000)
+            .get(30, TimeUnit.SECONDS)
+        assertTrue("jvm-ffi-list should succeed: ${reply.errorMessage}", reply.ok)
+        val catalog = reply.text!!
+        assertTrue("expected namespace header: $catalog", catalog.contains("namespace ArrayDeque"))
+        val names = ResultDecoder.parseCatalog(catalog).map { it.name }
+        assertTrue("expected addLast in $names", names.contains("addLast"))
+        // The catalog is the FULL surface (unpruned), so members a program never referenced appear.
+        assertTrue("expected getFirst in $names", names.contains("getFirst"))
+    }
+
+    @Test
+    fun `jvm-ffi-list reports a clean error for an unknown class`() {
+        val conn = connect()
+        val reply = conn.request(IdeCommands.jvmFfiList("", "com/example/DoesNotExist"), 30_000)
+            .get(30, TimeUnit.SECONDS)
+        assertFalse("unknown class should not succeed", reply.ok)
     }
 
     @Test
