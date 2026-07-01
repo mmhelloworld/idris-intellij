@@ -24,6 +24,12 @@ any `idris2` build that speaks ide-mode protocol version 2.
   caret (e.g. a function and its `where`-local), and highlight-usages (⌘F7) of
   the identifier under the caret
 - Code completion backed by `:repl-completions`
+- Java-FFI member completion and auto-import (JVM backend): when the receiver
+  resolves to a generated Java marker, completion offers the class's full
+  callable surface from the `:jvm-ffi-list` catalog — including members not yet
+  emitted into the binding module — with each member's signature shown inline.
+  Accepting a not-yet-generated member (re)generates its binding in the
+  background via `idris2 --jvm-ffi-import` so the inserted reference resolves
 - Type-driven interactive editing via Alt-Enter intentions:
   case split, add clause, proof search (with "next solution" cycling),
   generate definition (also cyclable), make lemma, make case, make with,
@@ -68,6 +74,13 @@ its declarations:
 Code completion backed by the compiler's `:repl-completions`:
 
 ![Code completion](docs/images/completion.gif)
+
+Java-FFI member completion and auto-import (JVM backend) — completing on a Java
+marker offers the class's full surface from `:jvm-ffi-list`; members not yet in
+the binding module are tagged `java (import)`, and accepting one generates its
+binding in the background so the reference resolves:
+
+![Java FFI member completion and auto-import](docs/images/ffi-completion.gif)
 
 Type-driven editing with Alt-Enter intentions — case split on a pattern
 variable:

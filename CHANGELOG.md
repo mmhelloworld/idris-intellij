@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.3
+
+### Added
+
+- **Java-FFI member completion and auto-import.** When the receiver resolves to a generated Java marker, completion now offers the class's full callable surface from the `:jvm-ffi-list` catalog — including members not yet emitted into the binding module — with the rendered signature shown inline. Accepting a member that has not yet been generated automatically (re)generates its binding via `idris2 --jvm-ffi-import` in the background, so the inserted reference resolves. The catalog is cached per resolved module classpath, so a dependency change yields a fresh key. Requires an Idris 2 JVM backend build of **0.8.4 or later** (the `--jvm-ffi-list`/`--jvm-ffi-import` flags this depends on are not present in earlier builds).
+
 ## 0.1.2
 
 ### Added
